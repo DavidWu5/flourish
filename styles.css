@@ -127,12 +127,12 @@ body::before {
 }
 
 .node-info-panel {
-  position: absolute;
+  position: fixed;
   top: 18px;
   right: 18px;
   z-index: 4;
-  width: min(340px, calc(100% - 36px));
-  max-height: calc(100% - 36px);
+  width: min(340px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
   overflow: auto;
   padding: 20px 18px;
   border: 1px solid rgba(232, 154, 181, 0.18);
