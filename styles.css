@@ -52,7 +52,7 @@ body::before {
   position: relative;
   z-index: 1;
   width: 100%;
-  padding: 12px 12px 0;
+  padding: 12px;
 }
 
 .build-banner {
@@ -71,8 +71,131 @@ body::before {
 
 .canvas-frame {
   position: relative;
-  width: 100%;
+  width: min(100%, 1360px);
+  margin: 0 auto;
   aspect-ratio: 1000 / 720;
+  overflow: clip;
+  cursor: grab;
+}
+
+.canvas-frame.is-panning {
+  cursor: grabbing;
+}
+
+.canvas-frame.is-panning * {
+  cursor: grabbing !important;
+}
+
+.canvas-hint {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 3;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 247, 236, 0.14);
+  border-radius: 999px;
+  background: rgba(21, 14, 11, 0.5);
+  color: rgba(255, 239, 221, 0.92);
+  font:
+    600 11px/1.2 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
+    monospace;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.node-info-panel {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 4;
+  width: min(340px, calc(100% - 36px));
+  max-height: calc(100% - 36px);
+  overflow: auto;
+  padding: 20px 18px;
+  border: 1px solid rgba(255, 244, 232, 0.1);
+  border-radius: 24px;
+  background: rgba(255, 249, 241, 0.88);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(18px);
+}
+
+.node-info-eyebrow {
+  margin: 0 0 8px;
+  color: rgba(98, 61, 43, 0.76);
+  font:
+    700 11px/1.2 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
+    monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.node-info-title {
+  margin: 0;
+  color: #2f1a11;
+  font: 600 28px/1.05 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.node-info-summary {
+  margin: 10px 0 0;
+  color: rgba(66, 40, 28, 0.82);
+  font: 500 14px/1.55 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.node-info-meta {
+  margin: 18px 0 0;
+}
+
+.node-info-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(94, 62, 45, 0.12);
+}
+
+.node-info-row dt {
+  margin: 0;
+  color: rgba(90, 59, 43, 0.72);
+  font:
+    700 11px/1.2 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
+    monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.node-info-row dd {
+  margin: 0;
+  color: #331f16;
+  font: 500 13px/1.5 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  word-break: break-word;
+}
+
+.node-info-extra {
+  margin-top: 18px;
+  padding-top: 4px;
+}
+
+.node-info-extra h3 {
+  margin: 0 0 8px;
+  color: #3d2519;
+  font: 600 16px/1.2 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.node-info-empty {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(143, 103, 80, 0.08);
+  color: rgba(77, 48, 35, 0.74);
+  font: 500 13px/1.45 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.node-info-empty[hidden] {
+  display: none;
+}
+
+.node-info-meta-list {
+  margin-top: 4px;
 }
 
 #treeSvg {
@@ -80,6 +203,7 @@ body::before {
   width: 100%;
   height: 100%;
   overflow: visible;
+  touch-action: none;
 }
 
 #treeMotion {
@@ -295,5 +419,25 @@ body::before {
 @media (max-width: 820px) {
   .app-shell {
     padding-inline: 8px;
+  }
+
+  .canvas-frame {
+    aspect-ratio: auto;
+    min-height: 760px;
+  }
+
+  .node-info-panel {
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    max-height: min(48%, 360px);
+    padding: 18px 16px;
+  }
+
+  .canvas-hint {
+    left: 10px;
+    bottom: calc(min(48%, 360px) + 22px);
   }
 }

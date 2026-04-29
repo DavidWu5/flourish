@@ -24,7 +24,8 @@
  *
  * Notes:
  * - `label` is the node topic shown on hover in the frontend.
- * - `summary` is optional supporting text the frontend can surface later.
+ * - `summary` is supporting text shown in the right-side hover info panel.
+ * - `metadata` is optional structured info also shown in the hover panel.
  */
 export class TreeProvider {
   async seed(_topic) {
@@ -77,13 +78,14 @@ export class MockTreeProvider extends TreeProvider {
     this.nextId = 0;
   }
 
-  makeNode({ label, parentId, summary, expandable = true }) {
+  makeNode({ label, parentId, summary, expandable = true, metadata = {} }) {
     return {
       id: `topic-${this.nextId++}`,
       label,
       parentId,
       summary,
       expandable,
+      metadata,
     };
   }
 
@@ -97,6 +99,10 @@ export class MockTreeProvider extends TreeProvider {
         parentId: null,
         summary: `A learning tree for ${topic}.`,
         expandable: true,
+        metadata: {
+          role: "Root topic",
+          status: "Ready to explore",
+        },
       },
       nodes: [],
     };
@@ -123,6 +129,11 @@ export class MockTreeProvider extends TreeProvider {
           parentId: nodeId,
           summary,
           expandable: nextDepth < this.maxDepth,
+          metadata: {
+            depth: nextDepth,
+            parentTopic: context.nodeLabel,
+            suggestedAction: nextDepth < this.maxDepth ? "Expand this branch" : "Review this leaf",
+          },
         }),
       ),
     };

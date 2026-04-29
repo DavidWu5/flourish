@@ -38,6 +38,7 @@ export function createTreeRenderer({
     hoverPathNodeId: null,
     hoveredNodeId: null,
     onExpandRequest: () => {},
+    onHoverChange: () => {},
   };
 
   svg.addEventListener("mouseleave", () => {
@@ -376,6 +377,7 @@ export function createTreeRenderer({
 
     state.hoverPathNodeId = pathNodeId;
     state.hoveredNodeId = hoveredNodeId;
+    state.onHoverChange(hoveredNodeId ? getNodeDetails(hoveredNodeId) : null);
     const didStartTransition = startEmphasisTransition(pathNodeId);
 
     if (didStartTransition) {
@@ -416,6 +418,7 @@ export function createTreeRenderer({
     state.emphasisAnimation = null;
     state.hoverPathNodeId = null;
     state.hoveredNodeId = null;
+    state.onHoverChange(null);
 
     if (!snapshot?.root) {
       throw new Error("Tree snapshot must include a root node");
@@ -501,6 +504,9 @@ export function createTreeRenderer({
     }
 
     if (!freshNodes.length) {
+      if (state.hoveredNodeId === parentId) {
+        state.onHoverChange(getNodeDetails(parentId));
+      }
       drawScene(now);
       return;
     }
@@ -515,11 +521,19 @@ export function createTreeRenderer({
       end: now + GROW_DURATION,
     };
 
+    if (state.hoveredNodeId === parentId) {
+      state.onHoverChange(getNodeDetails(parentId));
+    }
+
     runAnimationLoop();
   }
 
   function setExpandHandler(handler) {
     state.onExpandRequest = handler;
+  }
+
+  function setHoverHandler(handler) {
+    state.onHoverChange = typeof handler === "function" ? handler : () => {};
   }
 
   function setNodeLoading(nodeId, loading) {
@@ -540,6 +554,9 @@ export function createTreeRenderer({
     const node = state.nodes.get(nodeId);
     if (!node) return;
     patchPublicNode(node, patch);
+    if (state.hoveredNodeId === nodeId) {
+      state.onHoverChange(getNodeDetails(nodeId));
+    }
     if (!state.animation) drawScene(state.lastNow);
   }
 
@@ -1591,10 +1608,27 @@ export function createTreeRenderer({
     return labels.reverse();
   }
 
+  function getNodeDetails(nodeId) {
+    const node = state.nodes.get(nodeId);
+    if (!node) return null;
+
+    return {
+      id: node.id,
+      label: node.label,
+      summary: node.summary,
+      metadata: node.metadata,
+      depth: node.depth,
+      expandable: node.expandable,
+      childCount: node.children.length,
+      path: buildPath(nodeId),
+    };
+  }
+
   function getNodeContext(nodeId) {
     const node = state.nodes.get(nodeId);
     const root = state.nodes.get(state.rootId);
-    if (!node || !root) return null;
+    const details = getNodeDetails(nodeId);
+    if (!node || !root || !details) return null;
 
     return {
       rootTopic: root.label,
@@ -1603,7 +1637,7 @@ export function createTreeRenderer({
       summary: node.summary,
       depth: node.depth,
       expandable: node.expandable,
-      path: buildPath(nodeId),
+      path: details.path,
       existingChildren: node.children.map((childId) => state.nodes.get(childId)?.label).filter(Boolean),
     };
   }
@@ -1639,6 +1673,7 @@ export function createTreeRenderer({
     getSnapshot,
     patchNode,
     setExpandHandler,
+    setHoverHandler,
     setNodeError,
     setNodeLoading,
     setTree,

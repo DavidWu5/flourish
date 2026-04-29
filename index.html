@@ -9,21 +9,60 @@
   <body>
     <main class="app-shell">
       <p class="build-banner" id="buildBanner">Loading latest build...</p>
-      <div class="canvas-frame">
+      <section class="canvas-frame" id="canvasFrame">
         <svg
           id="treeSvg"
           viewBox="0 0 1000 720"
           aria-label="Interactive learning tree growth canvas"
           role="img"
         >
-          <g id="treeMotion">
-            <g id="branchBackdrop"></g>
-            <g id="branchGroup"></g>
-            <g id="tipGroup"></g>
-            <g id="nodeGroup"></g>
+          <g id="treeViewport">
+            <g id="treeMotion">
+              <g id="branchBackdrop"></g>
+              <g id="branchGroup"></g>
+              <g id="tipGroup"></g>
+              <g id="nodeGroup"></g>
+            </g>
           </g>
         </svg>
-      </div>
+
+        <div class="canvas-hint" id="canvasHint">Drag the tree to move the viewport</div>
+
+        <aside class="node-info-panel" id="nodeInfoPanel" aria-live="polite">
+          <p class="node-info-eyebrow">Node details</p>
+          <h2 class="node-info-title" id="nodeInfoTitle">Hover a node</h2>
+          <p class="node-info-summary" id="nodeInfoSummary">
+            Move over any topic node to inspect its details from the tree data.
+          </p>
+
+          <dl class="node-info-meta">
+            <div class="node-info-row">
+              <dt>Path</dt>
+              <dd id="nodeInfoPath">No node selected</dd>
+            </div>
+            <div class="node-info-row">
+              <dt>Depth</dt>
+              <dd id="nodeInfoDepth">--</dd>
+            </div>
+            <div class="node-info-row">
+              <dt>Children</dt>
+              <dd id="nodeInfoChildren">--</dd>
+            </div>
+            <div class="node-info-row">
+              <dt>Expandable</dt>
+              <dd id="nodeInfoExpandable">--</dd>
+            </div>
+          </dl>
+
+          <section class="node-info-extra">
+            <h3>Metadata</h3>
+            <div class="node-info-empty" id="nodeInfoEmpty">
+              API metadata for the hovered node will appear here.
+            </div>
+            <dl class="node-info-meta node-info-meta-list" id="nodeInfoMetadata"></dl>
+          </section>
+        </aside>
+      </section>
     </main>
 
     <script type="module" src="./app.js"></script>
