@@ -67,12 +67,4 @@ export class TreeController {
   getSnapshot() {
     return this.renderer.getSnapshot();
   }
-
-  focusNode(nodeId) {
-    this.renderer.focusNode(nodeId);
-  }
-
-  clearFocus() {
-    this.renderer.clearFocus();
-  }
 }

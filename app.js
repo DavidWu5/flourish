@@ -2,7 +2,7 @@ import { TreeController } from "./tree-controller.js";
 import { ApiTreeProvider, MockTreeProvider } from "./tree-provider.js";
 import { createTreeRenderer } from "./tree-renderer.js";
 
-const BUILD_VERSION = "Latest build marker: BRANCH_FIX_V3 (2026-04-29)";
+const BUILD_VERSION = "Latest build marker: TREE_ONLY_V1 (2026-04-29)";
 
 const renderer = createTreeRenderer({
   svg: document.querySelector("#treeSvg"),
@@ -38,12 +38,6 @@ window.treeApp = {
   },
   expand(nodeId) {
     return controller.expand(nodeId);
-  },
-  focusNode(nodeId) {
-    controller.focusNode(nodeId);
-  },
-  clearFocus() {
-    controller.clearFocus();
   },
   hydrate(snapshot) {
     controller.hydrate(snapshot);

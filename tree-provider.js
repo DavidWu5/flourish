@@ -25,7 +25,6 @@
  * Notes:
  * - `label` is the node topic shown on hover in the frontend.
  * - `summary` is optional supporting text the frontend can surface later.
- * - `context.focusedNodeId` tells the backend which path the user is currently isolating.
  */
 export class TreeProvider {
   async seed(_topic) {

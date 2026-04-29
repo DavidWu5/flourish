@@ -5,6 +5,12 @@ const HEIGHT = 720;
 const ROOT_X = WIDTH / 2;
 const ROOT_Y = HEIGHT - 92;
 const GROW_DURATION = 1250;
+const EMPHASIS_FADE_DURATION = 180;
+const BRANCH_RENDER_SCALE = 0.9;
+const BRANCH_GRADIENT_LAYERS = 12;
+const DIMMED_TREE_OPACITY = 0.18;
+const BRANCH_EDGE_RGB = { r: 132, g: 85, b: 64 };
+const BRANCH_CENTER_RGB = { r: 235, g: 214, b: 193 };
 
 export function createTreeRenderer({
   svg,
@@ -13,26 +19,23 @@ export function createTreeRenderer({
   tipGroup,
   nodeGroup,
 }) {
+  const defs = createSvgElement("defs");
+  svg.insertBefore(defs, svg.firstChild);
+
   const state = {
     nodes: new Map(),
     rootId: null,
     animation: null,
+    emphasisAnimation: null,
     rafId: 0,
     lastNow: performance.now(),
-    focusedNodeId: null,
+    hoverPathNodeId: null,
     hoveredNodeId: null,
     onExpandRequest: () => {},
   };
 
-  svg.addEventListener("click", (event) => {
-    if (event.target === svg) {
-      event.preventDefault();
-      clearFocus();
-    }
-  });
-
   svg.addEventListener("mouseleave", () => {
-    clearHoveredNode();
+    clearHoverState(null, null, true);
   });
 
   function randomSeeds() {
@@ -82,6 +85,7 @@ export function createTreeRenderer({
       render: {
         ...pose,
         visibility: data.parentId ? 0 : 1,
+        emphasis: 1,
       },
       ui: {
         loading: false,
@@ -104,6 +108,18 @@ export function createTreeRenderer({
 
   function lerp(a, b, t) {
     return a + (b - a) * t;
+  }
+
+  function lerpColor(a, b, t) {
+    return {
+      r: Math.round(lerp(a.r, b.r, t)),
+      g: Math.round(lerp(a.g, b.g, t)),
+      b: Math.round(lerp(a.b, b.b, t)),
+    };
+  }
+
+  function rgbToCss(color) {
+    return `rgb(${color.r}, ${color.g}, ${color.b})`;
   }
 
   function lerpAngle(a, b, t) {
@@ -201,64 +217,69 @@ export function createTreeRenderer({
     if (Object.hasOwn(patch, "expandable")) node.expandable = patch.expandable !== false;
   }
 
-  function getAncestorIds(nodeId) {
-    const ids = [];
+  function buildNodePathIds(nodeId) {
+    const pathIds = new Set();
     let current = state.nodes.get(nodeId);
 
     while (current) {
-      ids.push(current.id);
+      pathIds.add(current.id);
       current = current.parentId ? state.nodes.get(current.parentId) : null;
     }
 
-    return ids;
+    return pathIds;
   }
 
-  function collectDescendantIds(nodeId, sink = new Set()) {
-    const node = state.nodes.get(nodeId);
-    if (!node) return sink;
+  function startEmphasisTransition(pathNodeId) {
+    const targetPathIds =
+      pathNodeId && state.nodes.has(pathNodeId) ? buildNodePathIds(pathNodeId) : null;
+    const now = performance.now();
+    let hasChange = false;
 
-    sink.add(node.id);
-    node.children.forEach((childId) => collectDescendantIds(childId, sink));
-    return sink;
+    for (const node of state.nodes.values()) {
+      const nextEmphasis = targetPathIds?.has(node.id) ? 1 : targetPathIds ? DIMMED_TREE_OPACITY : 1;
+      const currentEmphasis = node.render.emphasis ?? 1;
+      node.fromEmphasis = currentEmphasis;
+      node.targetEmphasis = nextEmphasis;
+      if (Math.abs(currentEmphasis - nextEmphasis) > 0.001) {
+        hasChange = true;
+      }
+    }
+
+    if (!hasChange) {
+      state.emphasisAnimation = null;
+      return false;
+    }
+
+    state.emphasisAnimation = {
+      start: now,
+      end: now + EMPHASIS_FADE_DURATION,
+    };
+    return true;
   }
 
-  function focusSet() {
-    if (!state.focusedNodeId || !state.nodes.has(state.focusedNodeId)) return null;
+  function setHoverState(pathNodeId = null, hoveredNodeId = null) {
+    if (state.hoverPathNodeId === pathNodeId && state.hoveredNodeId === hoveredNodeId) return;
 
-    const focused = new Set(getAncestorIds(state.focusedNodeId));
-    const descendants = collectDescendantIds(state.focusedNodeId);
-    descendants.forEach((id) => focused.add(id));
-    return focused;
-  }
+    state.hoverPathNodeId = pathNodeId;
+    state.hoveredNodeId = hoveredNodeId;
+    const didStartTransition = startEmphasisTransition(pathNodeId);
 
-  function setHoveredNode(nodeId) {
-    state.hoveredNodeId = nodeId;
-    if (!state.animation) drawScene(state.lastNow);
-  }
-
-  function clearHoveredNode(nodeId = null) {
-    if (nodeId && state.hoveredNodeId !== nodeId) return;
-    state.hoveredNodeId = null;
-    if (!state.animation) drawScene(state.lastNow);
-  }
-
-  function focusNode(nodeId) {
-    if (!state.nodes.has(nodeId)) return;
-    state.focusedNodeId = nodeId;
-    if (!state.animation) drawScene(state.lastNow);
-  }
-
-  function clearFocus() {
-    state.focusedNodeId = null;
-    if (!state.animation) drawScene(state.lastNow);
-  }
-
-  function toggleFocusNode(nodeId) {
-    if (state.focusedNodeId === nodeId) {
-      clearFocus();
+    if (didStartTransition) {
+      runAnimationLoop();
       return;
     }
-    focusNode(nodeId);
+
+    if (!state.animation) drawScene(state.lastNow);
+  }
+
+  function clearHoverState(pathNodeId = null, hoveredNodeId = null, force = false) {
+    if (
+      !force &&
+      (state.hoverPathNodeId !== pathNodeId || state.hoveredNodeId !== hoveredNodeId)
+    ) {
+      return;
+    }
+    setHoverState(null, null);
   }
 
   function hydrateHierarchy(nodeId, parent = null) {
@@ -278,7 +299,8 @@ export function createTreeRenderer({
     cancelAnimationFrame(state.rafId);
     state.nodes.clear();
     state.animation = null;
-    state.focusedNodeId = null;
+    state.emphasisAnimation = null;
+    state.hoverPathNodeId = null;
     state.hoveredNodeId = null;
 
     if (!snapshot?.root) {
@@ -305,7 +327,9 @@ export function createTreeRenderer({
 
     for (const node of state.nodes.values()) {
       node.from = { ...node.target };
-      node.render = { ...node.target, visibility: 1 };
+      node.render = { ...node.target, visibility: 1, emphasis: 1 };
+      node.fromEmphasis = 1;
+      node.targetEmphasis = 1;
     }
 
     drawScene(performance.now());
@@ -349,7 +373,11 @@ export function createTreeRenderer({
         angle: parent.render.angle,
         thickness: Math.max(1.4, parent.render.thickness * 0.74),
       };
-      child.render = { ...child.from, visibility: 0.0001 };
+      child.render = {
+        ...child.from,
+        visibility: 0.0001,
+        emphasis: child.targetEmphasis ?? parent.render.emphasis ?? 1,
+      };
       freshNodes.push(child.id);
     }
 
@@ -581,9 +609,10 @@ export function createTreeRenderer({
     const tick = (now) => {
       state.lastNow = now;
       updateAnimation(now);
+      updateEmphasisAnimation(now);
       drawScene(now);
 
-      if (state.animation) {
+      if (state.animation || state.emphasisAnimation) {
         state.rafId = requestAnimationFrame(tick);
       }
     };
@@ -602,6 +631,7 @@ export function createTreeRenderer({
           angle: node.target.angle,
           thickness: node.target.thickness,
           visibility: 1,
+          emphasis: node.render.emphasis ?? 1,
         };
       }
       return;
@@ -621,6 +651,7 @@ export function createTreeRenderer({
         angle: lerpAngle(node.from.angle, node.target.angle, mix),
         thickness: lerp(node.from.thickness, node.target.thickness, mix),
         visibility: 1,
+        emphasis: node.render.emphasis ?? 1,
       };
     }
 
@@ -640,6 +671,7 @@ export function createTreeRenderer({
         node.render = {
           ...settledPose,
           visibility: clamp(growthMix * 1.04, 0, 1),
+          emphasis: node.render.emphasis ?? 1,
         };
         continue;
       }
@@ -662,12 +694,34 @@ export function createTreeRenderer({
         angle: Math.atan2(tipTangent.y, tipTangent.x),
         thickness: lerp(node.from.thickness, node.target.thickness, Math.pow(growthMix, 0.88)),
         visibility: clamp(growthMix * 1.05, 0, 1),
+        emphasis: node.render.emphasis ?? 1,
       };
     }
 
     if (now >= animation.end) {
       state.animation = null;
       updateAnimation(now);
+    }
+  }
+
+  function updateEmphasisAnimation(now) {
+    const animation = state.emphasisAnimation;
+
+    if (!animation) {
+      for (const node of state.nodes.values()) {
+        node.render.emphasis = node.targetEmphasis ?? 1;
+      }
+      return;
+    }
+
+    const mix = easeInOutCubic(clamp((now - animation.start) / EMPHASIS_FADE_DURATION, 0, 1));
+    for (const node of state.nodes.values()) {
+      node.render.emphasis = lerp(node.fromEmphasis ?? 1, node.targetEmphasis ?? 1, mix);
+    }
+
+    if (now >= animation.end) {
+      state.emphasisAnimation = null;
+      updateEmphasisAnimation(now);
     }
   }
 
@@ -702,15 +756,26 @@ export function createTreeRenderer({
   }
 
   function branchGeometryFromPoses(startPose, endPose, child) {
-    const start = { x: startPose.x, y: startPose.y };
+    const dirA = { x: Math.cos(startPose.angle), y: Math.sin(startPose.angle) };
+    const dirB = { x: Math.cos(endPose.angle), y: Math.sin(endPose.angle) };
+    const join = { x: startPose.x, y: startPose.y };
     const end = { x: endPose.x, y: endPose.y };
+    const rawDx = end.x - join.x;
+    const rawDy = end.y - join.y;
+    const rawLength = Math.hypot(rawDx, rawDy) || 1;
+    const overlap = Math.min(
+      rawLength * 0.2,
+      Math.max(6, (startPose.thickness || endPose.thickness || 10) * BRANCH_RENDER_SCALE * 0.72),
+    );
+    const start = {
+      x: join.x - dirA.x * overlap,
+      y: join.y - dirA.y * overlap,
+    };
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const length = Math.hypot(dx, dy) || 1;
     const straight = { x: dx / length, y: dy / length };
     const curvePerp = perpendicular(straight);
-    const dirA = { x: Math.cos(startPose.angle), y: Math.sin(startPose.angle) };
-    const dirB = { x: Math.cos(endPose.angle), y: Math.sin(endPose.angle) };
 
     const bendStrength =
       length * (0.07 + child.seed.warp * 0.06) * (child.side || (child.seed.lean >= 0 ? 1 : -1));
@@ -822,15 +887,78 @@ export function createTreeRenderer({
     );
   }
 
-  function branchOutlinePath(parent, child, geometry, scale = 1) {
-    const startWidth = branchStartWidth(parent, child) * scale * 0.5;
-    const endWidth = branchEndWidth(child) * scale * 0.5;
-    return outlinePathFromGeometry(
-      geometry,
-      startWidth,
-      endWidth,
-      child.slot === "trunk" ? 18 : 14,
-    );
+  function branchSurfacePaths(geometry, startWidth, endWidth, samples) {
+    return {
+      shadow: outlinePathFromGeometry(geometry, startWidth * 1.08, endWidth * 1.08, samples),
+      shell: outlinePathFromGeometry(geometry, startWidth, endWidth, samples),
+    };
+  }
+
+  function drawBranchSurface({
+    paths,
+    centerline,
+    highlightWidth,
+    gradientWidth,
+    clipId,
+    visibility = 1,
+    emphasis = 1,
+  }) {
+    const visibilityAlpha = clamp(visibility, 0, 1);
+    const emphasisAlpha = clamp(emphasis, DIMMED_TREE_OPACITY, 1);
+    const shadowOpacity =
+      (visibilityAlpha < 1 ? 0.32 + visibilityAlpha * 0.62 : 0.94) * emphasisAlpha;
+    const shellOpacity = (visibilityAlpha < 1 ? visibilityAlpha : 0.98) * emphasisAlpha;
+    const gradientOpacity = visibilityAlpha * emphasisAlpha;
+    const highlightOpacity =
+      (visibilityAlpha < 1
+        ? visibilityAlpha * 0.18
+        : clamp(0.16 + visibilityAlpha * 0.12, 0.08, 0.28)) * emphasisAlpha;
+
+    const shadow = createSvgElement("path", {
+      d: paths.shadow,
+      class: "branch-shadow",
+      opacity: shadowOpacity.toFixed(3),
+    });
+    const shell = createSvgElement("path", {
+      d: paths.shell,
+      class: "branch-shell",
+      opacity: shellOpacity.toFixed(3),
+    });
+    const clipPath = createSvgElement("clipPath", {
+      id: clipId,
+      clipPathUnits: "userSpaceOnUse",
+    });
+    clipPath.append(createSvgElement("path", { d: paths.shell }));
+    defs.append(clipPath);
+
+    const reflectedGradient = createSvgElement("g", {
+      "clip-path": `url(#${clipId})`,
+      opacity: gradientOpacity.toFixed(3),
+    });
+
+    for (let index = 0; index < BRANCH_GRADIENT_LAYERS; index += 1) {
+      const t = (index + 1) / BRANCH_GRADIENT_LAYERS;
+      const widthScale = lerp(0.94, 0.16, easeOutSine(t));
+      const color = rgbToCss(lerpColor(BRANCH_EDGE_RGB, BRANCH_CENTER_RGB, Math.pow(t, 0.92)));
+      const stroke = createSvgElement("path", {
+        d: centerline,
+        class: "branch-gradient-stroke",
+        stroke: color,
+        "stroke-width": (gradientWidth * widthScale).toFixed(2),
+        opacity: lerp(0.1, 0.78, Math.pow(t, 1.15)).toFixed(3),
+      });
+      reflectedGradient.append(stroke);
+    }
+
+    const highlight = createSvgElement("path", {
+      d: centerline,
+      class: "branch-highlight",
+      "stroke-width": highlightWidth.toFixed(2),
+      opacity: highlightOpacity.toFixed(3),
+    });
+
+    branchBackdrop.append(shadow);
+    branchGroup.append(shell, reflectedGradient, highlight);
   }
 
   function rootBaseGeometry(node) {
@@ -881,38 +1009,28 @@ export function createTreeRenderer({
     };
   }
 
-  function drawRootBase(node) {
+  function drawRootBase(node, emphasis = 1) {
     const geometry = rootBaseGeometry(node);
-    const startWidth = node.render.thickness * 1.95 * 0.5;
-    const endWidth = node.render.thickness * 1.02 * 0.5;
-    const shadow = createSvgElement("path", {
-      d: outlinePathFromGeometry(geometry, startWidth * 1.09, endWidth * 1.08, 16),
-      class: "branch-shadow",
-      opacity: 0.94,
+    const startWidth = node.render.thickness * 1.95 * BRANCH_RENDER_SCALE * 0.5;
+    const endWidth = node.render.thickness * 1.02 * BRANCH_RENDER_SCALE * 0.5;
+    drawBranchSurface({
+      paths: branchSurfacePaths(geometry, startWidth, endWidth, 16),
+      centerline: geometry.centerline,
+      highlightWidth: Math.max(1.1, endWidth * 0.24),
+      gradientWidth: startWidth * 2,
+      clipId: "branch-clip-root",
+      emphasis,
     });
-    const core = createSvgElement("path", {
-      d: outlinePathFromGeometry(geometry, startWidth, endWidth, 16),
-      class: "branch-core",
-      opacity: 0.98,
-    });
-    const highlight = createSvgElement("path", {
-      d: geometry.centerline,
-      class: "branch-highlight",
-      "stroke-width": Math.max(1.2, endWidth * 0.32).toFixed(2),
-      opacity: 0.26,
-    });
-
-    branchBackdrop.append(shadow);
-    branchGroup.append(core, highlight);
   }
 
   function attachNodeInteractions(target, node) {
-    target.addEventListener("mouseenter", () => setHoveredNode(node.id));
-    target.addEventListener("mouseleave", () => clearHoveredNode(node.id));
-    target.addEventListener("click", (event) => {
-      event.stopPropagation();
-      toggleFocusNode(node.id);
-    });
+    target.addEventListener("mouseenter", () => setHoverState(node.id, node.id));
+    target.addEventListener("mouseleave", () => clearHoverState(node.id, node.id));
+  }
+
+  function attachBranchInteractions(target, nodeId) {
+    target.addEventListener("mouseenter", () => setHoverState(nodeId, null));
+    target.addEventListener("mouseleave", () => clearHoverState(nodeId, null));
   }
 
   function drawHoverTooltip(node) {
@@ -946,60 +1064,61 @@ export function createTreeRenderer({
   }
 
   function drawScene(now) {
+    void now;
+    defs.replaceChildren();
     branchBackdrop.replaceChildren();
     branchGroup.replaceChildren();
     tipGroup.replaceChildren();
     nodeGroup.replaceChildren();
+    let clipIndex = 0;
 
     const nodes = [...state.nodes.values()].sort((a, b) => a.depth - b.depth);
-    const focusedIds = focusSet();
-    const focusActive = Boolean(focusedIds);
     const root = state.nodes.get(state.rootId);
     if (root) {
-      drawRootBase(root);
+      drawRootBase(root, root.render.emphasis ?? 1);
+      const rootBranchHit = createSvgElement("path", {
+        d: rootBaseGeometry(root).centerline,
+        class: "branch-hit",
+        "stroke-width": Math.max(18, root.render.thickness * 1.35).toFixed(2),
+      });
+      attachBranchInteractions(rootBranchHit, root.id);
+      branchGroup.append(rootBranchHit);
     }
 
     for (const node of nodes) {
       if (!node.parentId) continue;
       const parent = state.nodes.get(node.parentId);
-      const isDimmed = focusActive && !focusedIds.has(node.id);
       const geometry = branchGeometry(parent, node);
-      const shadow = createSvgElement("path", {
-        d: branchOutlinePath(parent, node, geometry, 1.08),
-        class: "branch-shadow",
-        opacity: isDimmed ? 0.08 : 0.94,
+      const startWidth = branchStartWidth(parent, node) * BRANCH_RENDER_SCALE * 0.5;
+      const endWidth = branchEndWidth(node) * BRANCH_RENDER_SCALE * 0.5;
+      const samples = node.slot === "trunk" ? 18 : 14;
+
+      drawBranchSurface({
+        paths: branchSurfacePaths(geometry, startWidth, endWidth, samples),
+        centerline: geometry.centerline,
+        highlightWidth: Math.max(0.8, endWidth * 0.2),
+        gradientWidth: startWidth * 2,
+        clipId: `branch-clip-${clipIndex++}`,
+        visibility: node.render.visibility,
+        emphasis: node.render.emphasis ?? 1,
       });
-      const core = createSvgElement("path", {
-        d: branchOutlinePath(parent, node, geometry),
-        class: "branch-core",
-        opacity: isDimmed ? 0.16 : 0.98,
-      });
-      const highlight = createSvgElement("path", {
+
+      const branchHit = createSvgElement("path", {
         d: geometry.centerline,
-        class: "branch-highlight",
-        "stroke-width": Math.max(0.9, branchEndWidth(node) * 0.22).toFixed(2),
-        opacity: isDimmed ? 0.04 : clamp(0.2 + node.render.visibility * 0.16, 0.1, 0.32),
+        class: "branch-hit",
+        "stroke-width": Math.max(14, (startWidth + endWidth) * 1.55).toFixed(2),
       });
-
-      if (node.render.visibility < 1) {
-        const alpha = clamp(node.render.visibility, 0, 1);
-        shadow.setAttribute("opacity", (0.32 + alpha * 0.62).toFixed(3));
-        core.setAttribute("opacity", alpha.toFixed(3));
-        highlight.setAttribute("opacity", (alpha * 0.22).toFixed(3));
-      }
-
-      branchBackdrop.append(shadow);
-      branchGroup.append(core, highlight);
+      attachBranchInteractions(branchHit, node.id);
+      branchGroup.append(branchHit);
     }
 
     for (const node of nodes) {
-      const isDimmed = focusActive && !focusedIds.has(node.id);
-
+      const emphasis = node.render.emphasis ?? 1;
       if (!node.parentId) {
         const rootHit = createSvgElement("circle", {
           cx: node.render.x.toFixed(2),
           cy: node.render.y.toFixed(2),
-          r: Math.max(18, node.render.thickness * 0.8).toFixed(2),
+          r: Math.max(24, node.render.thickness * 1.02).toFixed(2),
           class: "topic-hit",
         });
         attachNodeInteractions(rootHit, node);
@@ -1012,19 +1131,19 @@ export function createTreeRenderer({
         cy: node.render.y.toFixed(2),
         r: Math.max(2.2, node.render.thickness * 0.42).toFixed(2),
         class: "node-glow",
-        opacity: isDimmed ? 0.09 : 0.46,
+        opacity: (0.46 * emphasis).toFixed(3),
       });
       const core = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
         r: Math.max(1.7, node.render.thickness * 0.18).toFixed(2),
         class: "node-core",
-        opacity: isDimmed ? 0.18 : 1,
+        opacity: emphasis.toFixed(3),
       });
       const hit = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
-        r: Math.max(10, node.render.thickness * 0.9).toFixed(2),
+        r: Math.max(16, node.render.thickness * 1.18).toFixed(2),
         class: "topic-hit",
       });
       attachNodeInteractions(hit, node);
@@ -1037,7 +1156,7 @@ export function createTreeRenderer({
           cy: (node.render.y + Math.sin(node.render.angle) * 6).toFixed(2),
           r: 4.7,
           class: "blossom-bud",
-          opacity: isDimmed ? 0.14 : 0.88,
+          opacity: (0.88 * emphasis).toFixed(3),
         });
         nodeGroup.append(bud);
       }
@@ -1047,10 +1166,10 @@ export function createTreeRenderer({
 
     for (const node of nodes) {
       if (!canExpand(node)) continue;
-      if (focusActive && !focusedIds.has(node.id)) continue;
       if (state.animation && node.id === state.animation.sourceId) continue;
 
       const anchor = growthBudAnchor(node);
+      const emphasis = node.render.emphasis ?? 1;
       const classes = ["tip-button"];
       if (globallyDisabled || node.ui.loading) classes.push("is-disabled");
       if (node.ui.loading) classes.push("is-loading");
@@ -1062,6 +1181,7 @@ export function createTreeRenderer({
         tabindex: globallyDisabled || node.ui.loading ? -1 : 0,
         role: "button",
         "aria-label": `Expand ${node.label}`,
+        opacity: emphasis.toFixed(3),
       });
 
       const glow = createSvgElement("circle", {
@@ -1160,7 +1280,6 @@ export function createTreeRenderer({
       expandable: node.expandable,
       path: buildPath(nodeId),
       existingChildren: node.children.map((childId) => state.nodes.get(childId)?.label).filter(Boolean),
-      focusedNodeId: state.focusedNodeId,
     };
   }
 
@@ -1191,8 +1310,6 @@ export function createTreeRenderer({
 
   return {
     appendChildren,
-    clearFocus,
-    focusNode,
     getNodeContext,
     getSnapshot,
     patchNode,

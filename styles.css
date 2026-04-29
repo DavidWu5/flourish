@@ -1,9 +1,8 @@
 :root {
   --page-ink: #2e1b14;
-  --branch-fill: #9c6d52;
   --branch-shadow: rgba(63, 35, 24, 0.92);
-  --branch-edge: rgba(79, 46, 32, 0.18);
-  --branch-highlight: rgba(255, 239, 214, 0.3);
+  --branch-shell: #764b38;
+  --branch-highlight: rgba(255, 241, 220, 0.22);
   --node-core: #5d3726;
   --node-glow: rgba(228, 181, 134, 0.34);
   --bud-fill: rgba(214, 168, 124, 0.85);
@@ -70,11 +69,14 @@ body {
   fill: var(--branch-shadow);
 }
 
-.branch-core {
-  fill: var(--branch-fill);
-  stroke: var(--branch-edge);
-  stroke-width: 0.4;
-  paint-order: stroke fill;
+.branch-shell {
+  fill: var(--branch-shell);
+}
+
+.branch-gradient-stroke {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .branch-highlight {
@@ -82,6 +84,15 @@ body {
   stroke: var(--branch-highlight);
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.branch-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: stroke;
+  cursor: pointer;
 }
 
 .node-core {
@@ -101,6 +112,7 @@ body {
 .topic-hit {
   fill: transparent;
   cursor: pointer;
+  pointer-events: all;
 }
 
 .topic-tooltip-plate {
