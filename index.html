@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tree Growth Visualization Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <div class="canvas-frame">
+        <svg
+          id="treeSvg"
+          viewBox="0 0 1000 720"
+          aria-label="Interactive learning tree growth canvas"
+          role="img"
+        >
+          <g id="branchBackdrop"></g>
+          <g id="branchGroup"></g>
+          <g id="tipGroup"></g>
+          <g id="nodeGroup"></g>
+        </svg>
+      </div>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
