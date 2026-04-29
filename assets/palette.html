@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cherry Blossom Palette</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital@0;1&family=Cormorant+Garamond:ital,wght@0,300;1,300&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    /* ── The palette ── */
+    --sky:          #5ab5c8;
+    --sky-light:    #7dcad8;
+    --blossom:      #f2bdd0;
+    --blossom-deep: #e89ab5;
+    --cloud:        #f8efe8;
+    --green:        #7ec43a;
+    --green-dark:   #5a9a28;
+    --trunk-dark:   #3a3340;
+    --trunk-mid:    #6b6470;
+    --trunk-light:  #9da4a8;
+    --house-blue:   #6888a8;
+    --house-dark:   #4a6280;
+    --roof-red:     #d45840;
+    --white-bloom:  #e8f0f0;
+    --ground:       #8faab8;
+  }
+
+  body {
+    min-height: 100vh;
+    background: #f5ede8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .card {
+    background: #fdf8f5;
+    border-radius: 2px;
+    padding: 3rem;
+    max-width: 720px;
+    width: 100%;
+    box-shadow: 0 2px 40px rgba(90,70,80,0.08);
+  }
+
+  .title {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    font-style: italic;
+    font-size: 1.7rem;
+    color: #3a3340;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.3rem;
+  }
+
+  .subtitle {
+    font-size: 0.62rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #9da4a8;
+    margin-bottom: 2.5rem;
+  }
+
+  /* ── Wide hero swatches ── */
+  .hero-row {
+    display: grid;
+    grid-template-columns: 2fr 1.2fr 1fr;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .hero-swatch {
+    height: 120px;
+    border-radius: 2px;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+  }
+  .hero-swatch:hover { transform: scaleY(1.03); }
+
+  /* ── Small swatch grid ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px;
+    margin-bottom: 2.5rem;
+  }
+
+  .swatch {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    position: relative;
+  }
+  .swatch:hover { transform: scale(1.06); z-index: 2; }
+
+  /* ── Labels ── */
+  .swatch-wrap { display: flex; flex-direction: column; gap: 4px; }
+
+  .swatch-info {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px;
+    margin-bottom: 2.5rem;
+  }
+
+  .info-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .info-name {
+    font-size: 0.52rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6b6470;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .info-hex {
+    font-size: 0.6rem;
+    color: #3a3340;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .info-hex:hover { color: var(--sky); }
+
+  /* ── Copied toast ── */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: #3a3340;
+    color: #f8efe8;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 0.6rem 1.2rem;
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Usage row ── */
+  .usage-title {
+    font-size: 0.58rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #9da4a8;
+    margin-bottom: 1rem;
+  }
+
+  .usage-bar {
+    display: flex;
+    height: 28px;
+    border-radius: 2px;
+    overflow: hidden;
+    gap: 2px;
+  }
+
+  .usage-seg {
+    height: 100%;
+    transition: flex 0.4s ease;
+  }
+
+  /* ── CSS variables block ── */
+  .code-block {
+    background: #f0eae6;
+    border-radius: 2px;
+    padding: 1.2rem 1.4rem;
+    margin-top: 2rem;
+    font-size: 0.6rem;
+    line-height: 1.9;
+    color: #4a3a44;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code-key   { color: #5ab5c8; }
+  .code-value { color: #d45840; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <p class="title">Cherry Blossom, Spring</p>
+  <p class="subtitle">Colour Palette · 12 Tones</p>
+
+  <!-- Hero wide swatches -->
+  <div class="hero-row">
+    <div class="hero-swatch" style="background:#5ab5c8" onclick="copy('#5ab5c8')"></div>
+    <div class="hero-swatch" style="background:#f2bdd0" onclick="copy('#f2bdd0')"></div>
+    <div class="hero-swatch" style="background:#f8efe8" onclick="copy('#f8efe8')"></div>
+  </div>
+
+  <!-- Small swatches -->
+  <div class="grid" id="swatches"></div>
+  <div class="swatch-info" id="labels"></div>
+
+  <!-- Usage proportion bar -->
+  <p class="usage-title">Visual Weight</p>
+  <div class="usage-bar" id="usageBar"></div>
+
+  <!-- CSS vars -->
+  <div class="code-block" id="codeBlock"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const colors = [
+    { name: 'Sky',          hex: '#5ab5c8', weight: 22 },
+    { name: 'Sky Light',    hex: '#7dcad8', weight: 8  },
+    { name: 'Blossom',      hex: '#f2bdd0', weight: 20 },
+    { name: 'Blossom Deep', hex: '#e89ab5', weight: 6  },
+    { name: 'Cloud White',  hex: '#f8efe8', weight: 10 },
+    { name: 'Leaf Green',   hex: '#7ec43a', weight: 7  },
+    { name: 'Green Dark',   hex: '#5a9a28', weight: 3  },
+    { name: 'Trunk Dark',   hex: '#3a3340', weight: 6  },
+    { name: 'Trunk Mid',    hex: '#6b6470', weight: 5  },
+    { name: 'Stone',        hex: '#9da4a8', weight: 5  },
+    { name: 'House Blue',   hex: '#6888a8', weight: 5  },
+    { name: 'Accent Red',   hex: '#d45840', weight: 3  },
+  ];
+
+  const grid   = document.getElementById('swatches');
+  const labels = document.getElementById('labels');
+  const bar    = document.getElementById('usageBar');
+  const code   = document.getElementById('codeBlock');
+
+  // Swatches
+  colors.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'swatch';
+    s.style.background = c.hex;
+    s.onclick = () => copy(c.hex);
+    s.title = `${c.name} · ${c.hex}`;
+    grid.appendChild(s);
+
+    const cell = document.createElement('div');
+    cell.className = 'info-cell';
+    cell.innerHTML = `
+      <span class="info-name">${c.name}</span>
+      <span class="info-hex" onclick="copy('${c.hex}')">${c.hex}</span>`;
+    labels.appendChild(cell);
+  });
+
+  // Usage bar
+  const total = colors.reduce((s, c) => s + c.weight, 0);
+  colors.forEach(c => {
+    const seg = document.createElement('div');
+    seg.className = 'usage-seg';
+    seg.style.background = c.hex;
+    seg.style.flex = c.weight / total;
+    seg.title = `${c.name} ~${Math.round(c.weight/total*100)}%`;
+    bar.appendChild(seg);
+  });
+
+  // CSS vars block
+  const varName = n => '--' + n.toLowerCase().replace(/\s+/g, '-');
+  let lines = ':root {\n';
+  colors.forEach(c => {
+    lines += `  <span class="code-key">${varName(c.name)}</span>: <span class="code-value">${c.hex}</span>;\n`;
+  });
+  lines += '}';
+  code.innerHTML = lines;
+
+  // Copy to clipboard
+  function copy(hex) {
+    navigator.clipboard.writeText(hex).catch(() => {});
+    const t = document.getElementById('toast');
+    t.textContent = `Copied ${hex}`;
+    t.classList.add('show');
+    clearTimeout(window._tt);
+    window._tt = setTimeout(() => t.classList.remove('show'), 1600);
+  }
+</script>
+</body>
+</html>

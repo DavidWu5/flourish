@@ -38,6 +38,18 @@ export function createTreeRenderer({
   svg.addEventListener("mouseleave", () => {
     clearHoverState(null, null, true);
   });
+  svg.addEventListener("pointermove", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (
+      target.closest(".branch-hit") ||
+      target.closest(".topic-hit") ||
+      target.closest(".tip-button")
+    ) {
+      return;
+    }
+    clearHoverState(null, null, true);
+  });
 
   function randomSeeds() {
     return {
@@ -878,14 +890,34 @@ export function createTreeRenderer({
       });
     }
 
-    const outline = [...left, ...right.reverse()];
-    return (
-      outline
-        .map((point, index) =>
-          `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`,
-        )
-        .join(" ") + " Z"
-    );
+    const leftStart = left[0];
+    const rightEnd = right[right.length - 1];
+    const rightReturn = right.slice(0, -1).reverse();
+    const startTangent = normalize(branchTangentAt(geometry, 0.02));
+    const endTangent = normalize(branchTangentAt(geometry, 0.98));
+    const tipControl = {
+      x: geometry.end.x + endTangent.x * endWidth * 1.35,
+      y: geometry.end.y + endTangent.y * endWidth * 1.35,
+    };
+    const baseControl = {
+      x: geometry.start.x - startTangent.x * startWidth * 1.1,
+      y: geometry.start.y - startTangent.y * startWidth * 1.1,
+    };
+
+    const leftPath = left
+      .map((point, index) =>
+        `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`,
+      )
+      .join(" ");
+    const rightPath = rightReturn
+      .map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+      .join(" ");
+
+    return `${leftPath}
+      Q ${tipControl.x.toFixed(2)} ${tipControl.y.toFixed(2)} ${rightEnd.x.toFixed(2)} ${rightEnd.y.toFixed(2)}
+      ${rightPath}
+      Q ${baseControl.x.toFixed(2)} ${baseControl.y.toFixed(2)} ${leftStart.x.toFixed(2)} ${leftStart.y.toFixed(2)}
+      Z`;
   }
 
   function branchSurfacePaths(geometry, startWidth, endWidth, samples) {
@@ -1183,7 +1215,7 @@ export function createTreeRenderer({
       const rootBranchHit = createSvgElement("path", {
         d: rootBaseGeometry(root).centerline,
         class: "branch-hit",
-        "stroke-width": Math.max(18, root.render.thickness * 1.35).toFixed(2),
+        "stroke-width": Math.max(26, root.render.thickness * 1.7).toFixed(2),
       });
       attachBranchInteractions(rootBranchHit, root.id);
       branchGroup.append(rootBranchHit);
@@ -1211,7 +1243,7 @@ export function createTreeRenderer({
       const branchHit = createSvgElement("path", {
         d: geometry.centerline,
         class: "branch-hit",
-        "stroke-width": Math.max(14, (startWidth + endWidth) * 1.55).toFixed(2),
+        "stroke-width": Math.max(22, (startWidth + endWidth) * 2.2).toFixed(2),
       });
       attachBranchInteractions(branchHit, node.id);
       branchGroup.append(branchHit);
