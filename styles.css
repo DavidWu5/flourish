@@ -1,24 +1,41 @@
+@import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap");
+
 :root {
-  --page-ink: #2e1b14;
-  --branch-shadow: rgba(86, 56, 42, 0.3);
-  --branch-shell: #6b4733;
-  --branch-highlight: rgba(241, 224, 193, 0.2);
-  --branch-ridge: rgba(176, 138, 103, 0.34);
-  --branch-furrow: rgba(69, 42, 29, 0.28);
-  --node-core: #573325;
-  --node-glow: rgba(207, 162, 118, 0.32);
-  --bud-fill: rgba(214, 168, 124, 0.85);
-  --bud-stroke: rgba(255, 244, 226, 0.72);
-  --tooltip-fill: rgba(255, 251, 246, 0.96);
-  --tooltip-stroke: rgba(84, 52, 37, 0.16);
-  --tooltip-shadow: rgba(30, 18, 12, 0.14);
-  --tip-ring: rgba(88, 53, 37, 0.52);
-  --tip-ring-hover: rgba(74, 42, 29, 0.9);
-  --tip-plus: rgba(70, 39, 27, 0.88);
-  --tip-plus-hover: rgba(45, 24, 16, 1);
-  --tip-surface: rgba(255, 252, 248, 0.94);
-  --tip-loading: rgba(229, 216, 205, 0.96);
-  --tip-error: rgba(244, 225, 225, 0.96);
+  --sky: #5ab5c8;
+  --sky-light: #7dcad8;
+  --blossom: #f2bdd0;
+  --blossom-deep: #e89ab5;
+  --cloud: #f8efe8;
+  --green: #7ec43a;
+  --green-dark: #5a9a28;
+  --trunk-dark: #3a3340;
+  --trunk-mid: #6b6470;
+  --trunk-light: #9da4a8;
+  --house-blue: #6888a8;
+  --house-dark: #4a6280;
+  --roof-red: #d45840;
+  --white-bloom: #e8f0f0;
+  --ground: #8faab8;
+  --page-ink: var(--trunk-dark);
+  --branch-shadow: rgba(58, 51, 64, 0.26);
+  --branch-shell: var(--trunk-mid);
+  --branch-highlight: rgba(232, 240, 240, 0.24);
+  --branch-ridge: rgba(157, 164, 168, 0.34);
+  --branch-furrow: rgba(58, 51, 64, 0.32);
+  --node-core: var(--blossom-deep);
+  --node-glow: rgba(242, 189, 208, 0.36);
+  --bud-fill: rgba(242, 189, 208, 0.92);
+  --bud-stroke: rgba(232, 240, 240, 0.78);
+  --tooltip-fill: rgba(248, 239, 232, 0.96);
+  --tooltip-stroke: rgba(104, 136, 168, 0.22);
+  --tooltip-shadow: rgba(58, 51, 64, 0.14);
+  --tip-ring: rgba(104, 136, 168, 0.56);
+  --tip-ring-hover: rgba(90, 181, 200, 0.92);
+  --tip-plus: rgba(74, 98, 128, 0.9);
+  --tip-plus-hover: rgba(212, 88, 64, 1);
+  --tip-surface: rgba(248, 239, 232, 0.96);
+  --tip-loading: rgba(232, 240, 240, 0.98);
+  --tip-error: rgba(242, 189, 208, 0.42);
 }
 
 * {
@@ -34,16 +51,19 @@ body {
 body {
   position: relative;
   color: var(--page-ink);
-  background: #151515;
+  background:
+    radial-gradient(circle at top, rgba(125, 202, 216, 0.34), transparent 34%),
+    linear-gradient(180deg, #f5ede8 0%, #eef4f1 42%, #d9e7eb 100%);
+  font-family: "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 240 240'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' fill='%236b4733' filter='url(%23noise)' opacity='0.16'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 240 240'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' fill='%239da4a8' filter='url(%23noise)' opacity='0.14'/%3E%3C/svg%3E");
   background-size: 220px 220px;
-  opacity: 0.28;
+  opacity: 0.24;
   pointer-events: none;
   z-index: 0;
 }
@@ -59,14 +79,15 @@ body::before {
   width: min(100%, 960px);
   margin: 0 auto 8px;
   padding: 7px 12px;
-  border: 1px solid rgba(86, 56, 42, 0.12);
+  border: 1px solid rgba(104, 136, 168, 0.18);
   border-radius: 999px;
-  background: #5ab5c8;
-  color: rgba(74, 46, 33, 0.92);
+  background: rgba(90, 181, 200, 0.92);
+  color: var(--trunk-dark);
   font:
-    600 12px/1.25 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
-    monospace;
+    700 12px/1.25 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial,
+    sans-serif;
   letter-spacing: 0.01em;
+  box-shadow: 0 10px 24px rgba(104, 136, 168, 0.14);
 }
 
 .canvas-frame {
@@ -92,13 +113,13 @@ body::before {
   bottom: 18px;
   z-index: 3;
   padding: 8px 12px;
-  border: 1px solid rgba(255, 247, 236, 0.14);
+  border: 1px solid rgba(232, 154, 181, 0.24);
   border-radius: 999px;
-  background: rgba(21, 14, 11, 0.5);
-  color: rgba(255, 239, 221, 0.92);
+  background: rgba(58, 51, 64, 0.54);
+  color: rgba(248, 239, 232, 0.96);
   font:
-    600 11px/1.2 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
-    monospace;
+    700 11px/1.2 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial,
+    sans-serif;
   letter-spacing: 0.04em;
   backdrop-filter: blur(10px);
   pointer-events: none;
@@ -113,33 +134,33 @@ body::before {
   max-height: calc(100% - 36px);
   overflow: auto;
   padding: 20px 18px;
-  border: 1px solid rgba(255, 244, 232, 0.1);
+  border: 1px solid rgba(232, 154, 181, 0.18);
   border-radius: 24px;
-  background: rgba(255, 249, 241, 0.88);
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
+  background: rgba(248, 239, 232, 0.84);
+  box-shadow: 0 20px 45px rgba(74, 98, 128, 0.16);
   backdrop-filter: blur(18px);
 }
 
 .node-info-eyebrow {
   margin: 0 0 8px;
-  color: rgba(98, 61, 43, 0.76);
+  color: var(--trunk-light);
   font:
-    700 11px/1.2 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
-    monospace;
+    700 11px/1.2 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial,
+    sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .node-info-title {
   margin: 0;
-  color: #2f1a11;
-  font: 600 28px/1.05 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  color: var(--trunk-dark);
+  font: 700 34px/0.98 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 .node-info-summary {
   margin: 10px 0 0;
-  color: rgba(66, 40, 28, 0.82);
-  font: 500 14px/1.55 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  color: rgba(74, 98, 128, 0.9);
+  font: 400 13px/1.65 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 .node-info-meta {
@@ -151,23 +172,23 @@ body::before {
   grid-template-columns: 88px minmax(0, 1fr);
   gap: 10px;
   padding: 10px 0;
-  border-top: 1px solid rgba(94, 62, 45, 0.12);
+  border-top: 1px solid rgba(104, 136, 168, 0.14);
 }
 
 .node-info-row dt {
   margin: 0;
-  color: rgba(90, 59, 43, 0.72);
+  color: var(--trunk-mid);
   font:
-    700 11px/1.2 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
-    monospace;
+    700 11px/1.2 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial,
+    sans-serif;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .node-info-row dd {
   margin: 0;
-  color: #331f16;
-  font: 500 13px/1.5 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  color: var(--trunk-dark);
+  font: 400 12px/1.65 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   word-break: break-word;
 }
 
@@ -178,16 +199,16 @@ body::before {
 
 .node-info-extra h3 {
   margin: 0 0 8px;
-  color: #3d2519;
-  font: 600 16px/1.2 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  color: var(--house-dark);
+  font: 700 22px/1.05 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 .node-info-empty {
   padding: 12px 14px;
   border-radius: 16px;
-  background: rgba(143, 103, 80, 0.08);
-  color: rgba(77, 48, 35, 0.74);
-  font: 500 13px/1.45 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  background: rgba(232, 154, 181, 0.14);
+  color: var(--trunk-mid);
+  font: 400 12px/1.6 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 .node-info-empty[hidden] {
@@ -199,13 +220,13 @@ body::before {
 }
 
 .node-detail-layer {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 6;
+  z-index: 20;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(18, 11, 9, 0.4);
+  background: rgba(58, 51, 64, 0.28);
   backdrop-filter: blur(8px);
 }
 
@@ -214,15 +235,15 @@ body::before {
 }
 
 .node-detail-panel {
-  width: min(720px, calc(100% - 16px));
-  max-height: min(78vh, calc(100% - 16px));
+  width: min(720px, calc(100vw - 16px));
+  max-height: min(78vh, calc(100vh - 16px));
   overflow: auto;
   padding: 24px 24px 22px;
-  border: 1px solid rgba(255, 244, 232, 0.12);
+  border: 1px solid rgba(232, 154, 181, 0.22);
   border-radius: 28px;
   background:
-    linear-gradient(180deg, rgba(255, 252, 248, 0.98), rgba(247, 238, 228, 0.95));
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+    linear-gradient(180deg, rgba(248, 239, 232, 0.98), rgba(232, 240, 240, 0.95));
+  box-shadow: 0 28px 80px rgba(74, 98, 128, 0.22);
 }
 
 .node-detail-header {
@@ -234,24 +255,24 @@ body::before {
 
 .node-detail-eyebrow {
   margin: 0 0 8px;
-  color: rgba(98, 61, 43, 0.76);
+  color: var(--trunk-light);
   font:
-    700 11px/1.2 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
-    monospace;
+    700 11px/1.2 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial,
+    sans-serif;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .node-detail-title {
   margin: 0;
-  color: #24130d;
-  font: 600 32px/1.02 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  color: var(--trunk-dark);
+  font: 700 40px/0.96 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 .node-detail-path {
   margin: 10px 0 0;
-  color: rgba(74, 48, 35, 0.76);
-  font: 500 13px/1.45 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  color: var(--house-blue);
+  font: 400 12px/1.6 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 .node-detail-close {
@@ -259,26 +280,26 @@ body::before {
   padding: 10px 14px;
   border: 0;
   border-radius: 999px;
-  background: rgba(58, 35, 24, 0.92);
-  color: rgba(255, 246, 235, 0.98);
+  background: rgba(104, 136, 168, 0.96);
+  color: rgba(248, 239, 232, 0.98);
   font:
-    700 11px/1 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
-    monospace;
+    700 11px/1 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial,
+    sans-serif;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
 }
 
 .node-detail-close:hover {
-  background: rgba(40, 22, 15, 0.98);
+  background: rgba(74, 98, 128, 0.98);
 }
 
 .node-detail-body {
   margin-top: 20px;
   padding-top: 18px;
-  border-top: 1px solid rgba(94, 62, 45, 0.12);
-  color: #352117;
-  font: 500 15px/1.7 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  border-top: 1px solid rgba(104, 136, 168, 0.16);
+  color: var(--trunk-dark);
+  font: 400 13px/1.8 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   white-space: pre-wrap;
 }
 
@@ -389,9 +410,9 @@ body::before {
 }
 
 .topic-tooltip-text {
-  fill: #40271c;
+  fill: var(--trunk-dark);
   font:
-    600 13px/1.2 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+    700 12px/1.2 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   pointer-events: none;
 }
 
@@ -400,7 +421,7 @@ body::before {
 }
 
 .tip-glow {
-  fill: rgba(255, 252, 246, 0.52);
+  fill: rgba(242, 189, 208, 0.34);
   transition: fill 150ms ease, opacity 150ms ease;
 }
 
@@ -422,12 +443,12 @@ body::before {
 }
 
 .tip-button:hover .tip-glow {
-  fill: rgba(255, 251, 244, 0.72);
+  fill: rgba(242, 189, 208, 0.56);
 }
 
 .tip-button:hover .tip-ring {
   stroke: var(--tip-ring-hover);
-  fill: #fffdfa;
+  fill: rgba(248, 239, 232, 0.98);
 }
 
 .tip-button:hover .tip-plus {
@@ -441,21 +462,21 @@ body::before {
 
 .tip-button.is-loading .tip-ring {
   fill: var(--tip-loading);
-  stroke: rgba(105, 75, 58, 0.5);
+  stroke: rgba(104, 136, 168, 0.52);
 }
 
 .tip-button.is-loading .tip-plus {
-  stroke: rgba(97, 67, 51, 0.72);
+  stroke: rgba(104, 136, 168, 0.76);
   animation: tipPulse 900ms ease-in-out infinite alternate;
 }
 
 .tip-button.is-error .tip-ring {
   fill: var(--tip-error);
-  stroke: rgba(152, 83, 83, 0.58);
+  stroke: rgba(212, 88, 64, 0.64);
 }
 
 .tip-button.is-error .tip-plus {
-  stroke: rgba(136, 64, 64, 0.9);
+  stroke: rgba(212, 88, 64, 0.96);
 }
 
 @keyframes tipPulse {
@@ -531,7 +552,7 @@ body::before {
 
   .node-detail-panel {
     width: 100%;
-    max-height: calc(100% - 8px);
+    max-height: calc(100vh - 8px);
     padding: 20px 18px 18px;
   }
 
@@ -540,6 +561,6 @@ body::before {
   }
 
   .node-detail-title {
-    font-size: 28px;
+    font-size: 32px;
   }
 }
