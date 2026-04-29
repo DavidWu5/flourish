@@ -1,6 +1,6 @@
 :root {
   --page-ink: #2e1b14;
-  --branch-shadow: rgba(52, 30, 19, 0.9);
+  --branch-shadow: rgba(86, 56, 42, 0.3);
   --branch-shell: #6b4733;
   --branch-highlight: rgba(241, 224, 193, 0.2);
   --branch-ridge: rgba(176, 138, 103, 0.34);
@@ -19,12 +19,6 @@
   --tip-surface: rgba(255, 252, 248, 0.94);
   --tip-loading: rgba(229, 216, 205, 0.96);
   --tip-error: rgba(244, 225, 225, 0.96);
-  --grass-shadow: rgba(90, 154, 40, 0.34);
-  --grass-fill: #7ec43a;
-  --grass-ink: rgba(33, 58, 26, 0.84);
-  --grass-box-fill: rgba(255, 252, 247, 0.86);
-  --grass-box-stroke: rgba(74, 101, 60, 0.22);
-  --grass-box-shadow: rgba(33, 54, 22, 0.12);
 }
 
 * {
@@ -38,11 +32,25 @@ body {
 }
 
 body {
+  position: relative;
   color: var(--page-ink);
-  background: transparent;
+  background: #1d1d1d;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 240 240'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' fill='%236b4733' filter='url(%23noise)' opacity='0.16'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+  opacity: 0.28;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .app-shell {
+  position: relative;
+  z-index: 1;
   width: 100%;
   padding: 12px 12px 0;
 }
@@ -76,57 +84,9 @@ body {
 
 #treeMotion {
   transform-box: view-box;
-  transform-origin: 500px 628px;
+  transform-origin: 500px 690px;
   animation: treeSway 6200ms ease-in-out infinite;
   will-change: transform;
-}
-
-.ground-scene {
-  pointer-events: none;
-}
-
-.ground-scene * {
-  pointer-events: none;
-}
-
-.grass-shadow {
-  fill: var(--grass-shadow);
-}
-
-.grass-field {
-  fill: var(--grass-fill);
-}
-
-.grass-textbox-shell {
-  position: absolute;
-  left: 50%;
-  bottom: 22px;
-  z-index: 3;
-  transform: translateX(-50%);
-}
-
-.grass-textbox {
-  width: min(260px, 58vw);
-  padding: 10px 14px;
-  border: 1px solid var(--grass-box-stroke);
-  border-radius: 999px;
-  background: var(--grass-box-fill);
-  box-shadow: 0 10px 24px var(--grass-box-shadow);
-  color: var(--grass-ink);
-  font:
-    500 13px/1.2 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
-  outline: none;
-}
-
-.grass-textbox::placeholder {
-  color: rgba(53, 82, 42, 0.54);
-}
-
-.grass-textbox:focus {
-  border-color: rgba(74, 120, 59, 0.36);
-  box-shadow:
-    0 10px 24px var(--grass-box-shadow),
-    0 0 0 3px rgba(143, 184, 112, 0.22);
 }
 
 .branch-shadow {
@@ -136,6 +96,16 @@ body {
 
 .branch-shell {
   fill: var(--branch-shell);
+  pointer-events: none;
+}
+
+.branch-surface {
+  pointer-events: none;
+}
+
+.branch-grain-overlay {
+  fill: var(--branch-shell);
+  mix-blend-mode: multiply;
   pointer-events: none;
 }
 
@@ -321,14 +291,5 @@ body {
 @media (max-width: 820px) {
   .app-shell {
     padding-inline: 8px;
-  }
-
-  .grass-textbox-shell {
-    bottom: 16px;
-  }
-
-  .grass-textbox {
-    width: min(232px, 68vw);
-    padding: 9px 13px;
   }
 }

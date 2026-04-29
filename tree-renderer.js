@@ -3,12 +3,13 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const WIDTH = 1000;
 const HEIGHT = 720;
 const ROOT_X = WIDTH / 2;
-const ROOT_Y = HEIGHT - 92;
+const ROOT_Y = HEIGHT - 48;
 const GROW_DURATION = 1250;
 const EMPHASIS_FADE_DURATION = 180;
 const BRANCH_RENDER_SCALE = 0.9;
 const BRANCH_GRADIENT_LAYERS = 12;
 const DIMMED_TREE_OPACITY = 0.18;
+const BRANCH_NOISE_FILTER_ID = "branch-bark-noise";
 const BRANCH_EDGE_RGB = { r: 96, g: 58, b: 38 };
 const BRANCH_CENTER_RGB = { r: 171, g: 124, b: 90 };
 const BRANCH_HIGHLIGHT_RGB = { r: 225, g: 192, b: 150 };
@@ -119,6 +120,16 @@ export function createTreeRenderer({
     return Math.sin((t * Math.PI) / 2);
   }
 
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function easeOutBack(t, overshoot = 0.72) {
+    const c1 = overshoot;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }
+
   function lerp(a, b, t) {
     return a + (b - a) * t;
   }
@@ -220,6 +231,55 @@ export function createTreeRenderer({
       element.setAttribute(key, String(value));
     }
     return element;
+  }
+
+  function createBranchNoiseFilter() {
+    const filter = createSvgElement("filter", {
+      id: BRANCH_NOISE_FILTER_ID,
+      x: "0%",
+      y: "0%",
+      width: "100%",
+      height: "100%",
+      filterUnits: "objectBoundingBox",
+      primitiveUnits: "objectBoundingBox",
+      colorInterpolationFilters: "sRGB",
+    });
+    filter.append(
+      createSvgElement("feTurbulence", {
+        type: "fractalNoise",
+        baseFrequency: "0.9",
+        numOctaves: "2",
+        seed: "11",
+        stitchTiles: "stitch",
+        result: "noise",
+      }),
+    );
+    filter.append(
+      createSvgElement("feColorMatrix", {
+        in: "noise",
+        type: "saturate",
+        values: "0",
+        result: "noiseMono",
+      }),
+    );
+    const noiseAlpha = createSvgElement("feComponentTransfer", {
+      in: "noiseMono",
+      result: "noiseGrain",
+    });
+    noiseAlpha.append(createSvgElement("feFuncR", { type: "gamma", amplitude: "1.15", exponent: "0.72", offset: "0" }));
+    noiseAlpha.append(createSvgElement("feFuncG", { type: "gamma", amplitude: "1.15", exponent: "0.72", offset: "0" }));
+    noiseAlpha.append(createSvgElement("feFuncB", { type: "gamma", amplitude: "1.15", exponent: "0.72", offset: "0" }));
+    noiseAlpha.append(createSvgElement("feFuncA", { type: "table", tableValues: "0 0.34" }));
+    filter.append(noiseAlpha);
+    filter.append(
+      createSvgElement("feComposite", {
+        in: "noiseGrain",
+        in2: "SourceAlpha",
+        operator: "in",
+        result: "grain",
+      }),
+    );
+    return filter;
   }
 
   function patchPublicNode(node, patch) {
@@ -651,8 +711,10 @@ export function createTreeRenderer({
     }
 
     const growT = clamp((now - animation.start) / GROW_DURATION, 0, 1);
-    const settleMix = easeOutSine(clamp(growT * 1.08, 0, 1));
-    const growthMix = easeInOutCubic(growT);
+    const settleMix = easeOutBack(clamp(growT * 1.03, 0, 1), 0.68);
+    const tipGrowthMix = easeOutCubic(clamp(growT * 1.02, 0, 1));
+    const thicknessMix = easeOutCubic(clamp((growT - 0.14) / 0.86, 0, 1));
+    const growthBendScale = 1 + Math.sin(tipGrowthMix * Math.PI) * 0.14;
 
     for (const node of state.nodes.values()) {
       if (animation.newChildIds.has(node.id)) continue;
@@ -683,7 +745,7 @@ export function createTreeRenderer({
       if (!parent) {
         node.render = {
           ...settledPose,
-          visibility: clamp(growthMix * 1.04, 0, 1),
+          visibility: clamp(tipGrowthMix * 1.04, 0, 1),
           emphasis: node.render.emphasis ?? 1,
         };
         continue;
@@ -697,16 +759,17 @@ export function createTreeRenderer({
         },
         settledPose,
         node,
+        { bendScale: growthBendScale },
       );
-      const tipPoint = branchPointAt(geometry, growthMix);
-      const tipTangent = normalize(branchTangentAt(geometry, Math.max(0.02, growthMix)));
+      const tipPoint = branchPointAt(geometry, tipGrowthMix);
+      const tipTangent = normalize(branchTangentAt(geometry, Math.max(0.02, tipGrowthMix)));
 
       node.render = {
         x: tipPoint.x,
         y: tipPoint.y,
         angle: Math.atan2(tipTangent.y, tipTangent.x),
-        thickness: lerp(node.from.thickness, node.target.thickness, Math.pow(growthMix, 0.88)),
-        visibility: clamp(growthMix * 1.05, 0, 1),
+        thickness: lerp(node.from.thickness, node.target.thickness, thicknessMix),
+        visibility: clamp(tipGrowthMix * 1.05, 0, 1),
         emphasis: node.render.emphasis ?? 1,
       };
     }
@@ -768,7 +831,8 @@ export function createTreeRenderer({
     return { x, y };
   }
 
-  function branchGeometryFromPoses(startPose, endPose, child) {
+  function branchGeometryFromPoses(startPose, endPose, child, options = {}) {
+    const { bendScale = 1 } = options;
     const dirA = { x: Math.cos(startPose.angle), y: Math.sin(startPose.angle) };
     const dirB = { x: Math.cos(endPose.angle), y: Math.sin(endPose.angle) };
     const join = { x: startPose.x, y: startPose.y };
@@ -791,7 +855,10 @@ export function createTreeRenderer({
     const curvePerp = perpendicular(straight);
 
     const bendStrength =
-      length * (0.07 + child.seed.warp * 0.06) * (child.side || (child.seed.lean >= 0 ? 1 : -1));
+      length *
+      (0.07 + child.seed.warp * 0.06) *
+      (child.side || (child.seed.lean >= 0 ? 1 : -1)) *
+      bendScale;
     const bend = bendStrength;
     const crook = (child.seed.curve - 0.5) * length * 0.08;
 
@@ -1024,7 +1091,7 @@ export function createTreeRenderer({
     const visibilityAlpha = clamp(visibility, 0, 1);
     const emphasisAlpha = clamp(emphasis, DIMMED_TREE_OPACITY, 1);
     const shadowOpacity =
-      (visibilityAlpha < 1 ? 0.32 + visibilityAlpha * 0.62 : 0.94) * emphasisAlpha;
+      (visibilityAlpha < 1 ? 0.05 + visibilityAlpha * 0.12 : 0.18) * emphasisAlpha;
     const shellOpacity = (visibilityAlpha < 1 ? visibilityAlpha : 0.98) * emphasisAlpha;
     const gradientOpacity = visibilityAlpha * emphasisAlpha;
     const highlightOpacity =
@@ -1084,6 +1151,21 @@ export function createTreeRenderer({
       );
     });
 
+    const grainOverlay = createSvgElement("g", {
+      "clip-path": `url(#${clipId})`,
+      opacity: (gradientOpacity * 0.85).toFixed(3),
+    });
+    grainOverlay.append(
+      createSvgElement("rect", {
+        x: 0,
+        y: 0,
+        width: WIDTH,
+        height: HEIGHT,
+        class: "branch-grain-overlay",
+        filter: `url(#${BRANCH_NOISE_FILTER_ID})`,
+      }),
+    );
+
     const highlight = createSvgElement("path", {
       d: centerline,
       class: "branch-highlight",
@@ -1092,8 +1174,13 @@ export function createTreeRenderer({
       stroke: rgbToCss(lerpColor(BRANCH_CENTER_RGB, BRANCH_HIGHLIGHT_RGB, 0.72)),
     });
 
+    const surface = createSvgElement("g", {
+      class: "branch-surface",
+    });
+    surface.append(shell, reflectedGradient, grainOverlay, barkGrain);
+
     branchBackdrop.append(shadow);
-    branchGroup.append(shell, reflectedGradient, barkGrain, highlight);
+    branchGroup.append(surface, highlight);
   }
 
   function rootBaseGeometry(node) {
@@ -1202,6 +1289,7 @@ export function createTreeRenderer({
   function drawScene(now) {
     void now;
     defs.replaceChildren();
+    defs.append(createBranchNoiseFilter());
     branchBackdrop.replaceChildren();
     branchGroup.replaceChildren();
     tipGroup.replaceChildren();

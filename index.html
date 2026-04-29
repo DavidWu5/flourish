@@ -10,25 +10,12 @@
     <main class="app-shell">
       <p class="build-banner" id="buildBanner">Loading latest build...</p>
       <div class="canvas-frame">
-        <div class="grass-textbox-shell">
-          <input
-            id="grassTextbox"
-            class="grass-textbox"
-            type="text"
-            placeholder="Add a note"
-            aria-label="Grass field note"
-          />
-        </div>
         <svg
           id="treeSvg"
           viewBox="0 0 1000 720"
           aria-label="Interactive learning tree growth canvas"
           role="img"
         >
-          <g class="ground-scene" aria-hidden="true">
-            <rect class="grass-shadow" x="0" y="646" width="1000" height="74"></rect>
-            <rect class="grass-field" x="0" y="638" width="1000" height="82"></rect>
-          </g>
           <g id="treeMotion">
             <g id="branchBackdrop"></g>
             <g id="branchGroup"></g>
