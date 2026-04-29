@@ -1,4 +1,9 @@
+.env
+.env.*
+!.env.example
 server/.env
+server/.env.*
+!server/.env.example
 node_modules/
 server/node_modules/
 .DS_Store
