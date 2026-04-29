@@ -1,10 +1,12 @@
 :root {
   --page-ink: #2e1b14;
-  --branch-shadow: rgba(63, 35, 24, 0.92);
-  --branch-shell: #764b38;
-  --branch-highlight: rgba(255, 241, 220, 0.22);
-  --node-core: #5d3726;
-  --node-glow: rgba(228, 181, 134, 0.34);
+  --branch-shadow: rgba(52, 30, 19, 0.9);
+  --branch-shell: #6b4733;
+  --branch-highlight: rgba(241, 224, 193, 0.2);
+  --branch-ridge: rgba(176, 138, 103, 0.34);
+  --branch-furrow: rgba(69, 42, 29, 0.28);
+  --node-core: #573325;
+  --node-glow: rgba(207, 162, 118, 0.32);
   --bud-fill: rgba(214, 168, 124, 0.85);
   --bud-stroke: rgba(255, 244, 226, 0.72);
   --tooltip-fill: rgba(255, 251, 246, 0.96);
@@ -65,6 +67,13 @@ body {
   overflow: visible;
 }
 
+#treeMotion {
+  transform-box: view-box;
+  transform-origin: 500px 628px;
+  animation: treeSway 6200ms ease-in-out infinite;
+  will-change: transform;
+}
+
 .branch-shadow {
   fill: var(--branch-shadow);
 }
@@ -77,6 +86,21 @@ body {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.branch-bark-ridge,
+.branch-bark-furrow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.branch-bark-ridge {
+  stroke: var(--branch-ridge);
+}
+
+.branch-bark-furrow {
+  stroke: var(--branch-furrow);
 }
 
 .branch-highlight {
@@ -200,6 +224,34 @@ body {
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes treeSway {
+  0% {
+    transform: translateX(-1.8px) rotate(-0.8deg);
+  }
+
+  25% {
+    transform: translateX(-0.6px) translateY(-0.7px) rotate(-0.28deg);
+  }
+
+  50% {
+    transform: translateX(1.4px) translateY(0.35px) rotate(0.42deg);
+  }
+
+  75% {
+    transform: translateX(2.2px) translateY(-0.45px) rotate(0.9deg);
+  }
+
+  100% {
+    transform: translateX(-1.2px) translateY(0.15px) rotate(-0.5deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #treeMotion {
+    animation: none;
   }
 }
 

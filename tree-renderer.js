@@ -9,8 +9,9 @@ const EMPHASIS_FADE_DURATION = 180;
 const BRANCH_RENDER_SCALE = 0.9;
 const BRANCH_GRADIENT_LAYERS = 12;
 const DIMMED_TREE_OPACITY = 0.18;
-const BRANCH_EDGE_RGB = { r: 132, g: 85, b: 64 };
-const BRANCH_CENTER_RGB = { r: 235, g: 214, b: 193 };
+const BRANCH_EDGE_RGB = { r: 96, g: 58, b: 38 };
+const BRANCH_CENTER_RGB = { r: 171, g: 124, b: 90 };
+const BRANCH_HIGHLIGHT_RGB = { r: 225, g: 192, b: 150 };
 
 export function createTreeRenderer({
   svg,
@@ -894,8 +895,93 @@ export function createTreeRenderer({
     };
   }
 
+  function barkStrokePath(geometry, startWidth, endWidth, options = {}) {
+    const {
+      offsetRatio = 0,
+      startT = 0,
+      endT = 1,
+      samples = 12,
+      phase = 0,
+      waveFrequency = 2.2,
+      waveStrength = 0.06,
+      taper = 1,
+    } = options;
+
+    const points = [];
+    for (let index = 0; index <= samples; index += 1) {
+      const mix = index / samples;
+      const t = lerp(startT, endT, mix);
+      const point = branchPointAt(geometry, t);
+      const tangent = normalize(branchTangentAt(geometry, t));
+      const normal = perpendicular(tangent);
+      const localWidth = lerp(startWidth, endWidth, Math.pow(t, 0.82));
+      const envelope = Math.sin(Math.PI * mix) * taper;
+      const jitter = Math.sin(t * Math.PI * waveFrequency + phase) * localWidth * waveStrength * envelope;
+      const offset = localWidth * offsetRatio + jitter;
+
+      points.push({
+        x: point.x + normal.x * offset,
+        y: point.y + normal.y * offset,
+      });
+    }
+
+    return points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+      .join(" ");
+  }
+
+  function branchBarkTexture(geometry, startWidth, endWidth, seedA = 0.5, seedB = 0.5) {
+    const averageWidth = (startWidth + endWidth) * 0.5;
+    const ridgeCount = clamp(Math.round(averageWidth / 4.8), 3, 6);
+    const strokes = [];
+
+    for (let index = 0; index < ridgeCount; index += 1) {
+      const spread = ridgeCount === 1 ? 0 : lerp(-0.44, 0.44, index / (ridgeCount - 1));
+      const tShift = (index / Math.max(1, ridgeCount - 1) - 0.5) * 0.08;
+      const startT = clamp(0.03 + seedA * 0.04 + Math.abs(spread) * 0.03 + tShift, 0.02, 0.18);
+      const endT = clamp(0.92 - seedB * 0.05 - Math.abs(spread) * 0.07 - tShift, 0.74, 0.98);
+      const width = Math.max(0.7, averageWidth * (0.08 - Math.abs(spread) * 0.03));
+      const phase = seedA * Math.PI * 2 + index * 0.92;
+
+      strokes.push({
+        d: barkStrokePath(geometry, startWidth, endWidth, {
+          offsetRatio: spread,
+          startT,
+          endT,
+          samples: 11,
+          phase,
+          waveFrequency: 2 + seedB * 1.8 + index * 0.22,
+          waveStrength: 0.05 + seedA * 0.025,
+          taper: 0.94 - Math.abs(spread) * 0.18,
+        }),
+        width,
+        opacity: clamp(0.15 + (1 - Math.abs(spread)) * 0.18, 0.12, 0.34),
+        className: index % 2 === 0 ? "branch-bark-furrow" : "branch-bark-ridge",
+      });
+    }
+
+    strokes.push({
+      d: barkStrokePath(geometry, startWidth, endWidth, {
+        offsetRatio: -0.1 + (seedB - 0.5) * 0.12,
+        startT: 0.08,
+        endT: 0.94,
+        samples: 13,
+        phase: Math.PI * (0.5 + seedB),
+        waveFrequency: 3.1,
+        waveStrength: 0.038,
+        taper: 1,
+      }),
+      width: Math.max(0.85, averageWidth * 0.12),
+      opacity: 0.3,
+      className: "branch-bark-ridge",
+    });
+
+    return strokes;
+  }
+
   function drawBranchSurface({
     paths,
+    barkTexture = [],
     centerline,
     highlightWidth,
     gradientWidth,
@@ -950,15 +1036,32 @@ export function createTreeRenderer({
       reflectedGradient.append(stroke);
     }
 
+    const barkGrain = createSvgElement("g", {
+      "clip-path": `url(#${clipId})`,
+      opacity: gradientOpacity.toFixed(3),
+    });
+
+    barkTexture.forEach((strokeData) => {
+      barkGrain.append(
+        createSvgElement("path", {
+          d: strokeData.d,
+          class: strokeData.className,
+          "stroke-width": strokeData.width.toFixed(2),
+          opacity: (strokeData.opacity * emphasisAlpha).toFixed(3),
+        }),
+      );
+    });
+
     const highlight = createSvgElement("path", {
       d: centerline,
       class: "branch-highlight",
       "stroke-width": highlightWidth.toFixed(2),
       opacity: highlightOpacity.toFixed(3),
+      stroke: rgbToCss(lerpColor(BRANCH_CENTER_RGB, BRANCH_HIGHLIGHT_RGB, 0.72)),
     });
 
     branchBackdrop.append(shadow);
-    branchGroup.append(shell, reflectedGradient, highlight);
+    branchGroup.append(shell, reflectedGradient, barkGrain, highlight);
   }
 
   function rootBaseGeometry(node) {
@@ -1015,6 +1118,7 @@ export function createTreeRenderer({
     const endWidth = node.render.thickness * 1.02 * BRANCH_RENDER_SCALE * 0.5;
     drawBranchSurface({
       paths: branchSurfacePaths(geometry, startWidth, endWidth, 16),
+      barkTexture: branchBarkTexture(geometry, startWidth, endWidth, 0.32, 0.61),
       centerline: geometry.centerline,
       highlightWidth: Math.max(1.1, endWidth * 0.24),
       gradientWidth: startWidth * 2,
@@ -1095,8 +1199,9 @@ export function createTreeRenderer({
 
       drawBranchSurface({
         paths: branchSurfacePaths(geometry, startWidth, endWidth, samples),
+        barkTexture: branchBarkTexture(geometry, startWidth, endWidth, node.seed.curve, node.seed.warp),
         centerline: geometry.centerline,
-        highlightWidth: Math.max(0.8, endWidth * 0.2),
+        highlightWidth: Math.max(0.75, endWidth * 0.16),
         gradientWidth: startWidth * 2,
         clipId: `branch-clip-${clipIndex++}`,
         visibility: node.render.visibility,
