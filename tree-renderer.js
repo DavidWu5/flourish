@@ -19,12 +19,15 @@ export function createTreeRenderer({
     animation: null,
     rafId: 0,
     lastNow: performance.now(),
+    focusedNodeId: null,
+    hoveredNodeId: null,
     onExpandRequest: () => {},
   };
 
   svg.addEventListener("click", (event) => {
     if (event.target === svg) {
       event.preventDefault();
+      clearFocus();
     }
   });
 
@@ -51,6 +54,7 @@ export function createTreeRenderer({
       weight: 1,
       spread: 0,
       girth: 1.4,
+      crown: 1,
     };
   }
 
@@ -133,6 +137,27 @@ export function createTreeRenderer({
     return lerp(0.34, 0.96, density) * lerp(1.08, 0.74, depthT);
   }
 
+  function childLayoutOffsets(node) {
+    const children = node.children.map((childId) => state.nodes.get(childId));
+    if (children.length <= 1) return [0];
+
+    const weights = children.map((child) =>
+      Math.max(1, child.stats.crown * 0.82 + child.stats.girth * 0.34),
+    );
+    const gap = 0.74 + clamp(node.depth / 8, 0, 1) * 0.12;
+    const total = weights.reduce((sum, weight) => sum + weight, 0) + gap * (weights.length - 1);
+
+    let cursor = -total / 2;
+    const centers = weights.map((weight) => {
+      const center = cursor + weight / 2;
+      cursor += weight + gap;
+      return center;
+    });
+    const maxAbs = Math.max(...centers.map((value) => Math.abs(value))) || 1;
+
+    return centers.map((value) => clamp(value / maxAbs, -1, 1));
+  }
+
   function canExpand(node) {
     return Boolean(node.expandable) && !node.ui.loading && node.children.length === 0;
   }
@@ -153,6 +178,66 @@ export function createTreeRenderer({
     if (Object.hasOwn(patch, "expandable")) node.expandable = patch.expandable !== false;
   }
 
+  function getAncestorIds(nodeId) {
+    const ids = [];
+    let current = state.nodes.get(nodeId);
+
+    while (current) {
+      ids.push(current.id);
+      current = current.parentId ? state.nodes.get(current.parentId) : null;
+    }
+
+    return ids;
+  }
+
+  function collectDescendantIds(nodeId, sink = new Set()) {
+    const node = state.nodes.get(nodeId);
+    if (!node) return sink;
+
+    sink.add(node.id);
+    node.children.forEach((childId) => collectDescendantIds(childId, sink));
+    return sink;
+  }
+
+  function focusSet() {
+    if (!state.focusedNodeId || !state.nodes.has(state.focusedNodeId)) return null;
+
+    const focused = new Set(getAncestorIds(state.focusedNodeId));
+    const descendants = collectDescendantIds(state.focusedNodeId);
+    descendants.forEach((id) => focused.add(id));
+    return focused;
+  }
+
+  function setHoveredNode(nodeId) {
+    state.hoveredNodeId = nodeId;
+    if (!state.animation) drawScene(state.lastNow);
+  }
+
+  function clearHoveredNode(nodeId = null) {
+    if (nodeId && state.hoveredNodeId !== nodeId) return;
+    state.hoveredNodeId = null;
+    if (!state.animation) drawScene(state.lastNow);
+  }
+
+  function focusNode(nodeId) {
+    if (!state.nodes.has(nodeId)) return;
+    state.focusedNodeId = nodeId;
+    if (!state.animation) drawScene(state.lastNow);
+  }
+
+  function clearFocus() {
+    state.focusedNodeId = null;
+    if (!state.animation) drawScene(state.lastNow);
+  }
+
+  function toggleFocusNode(nodeId) {
+    if (state.focusedNodeId === nodeId) {
+      clearFocus();
+      return;
+    }
+    focusNode(nodeId);
+  }
+
   function hydrateHierarchy(nodeId, parent = null) {
     const node = state.nodes.get(nodeId);
     if (!node) return;
@@ -170,6 +255,8 @@ export function createTreeRenderer({
     cancelAnimationFrame(state.rafId);
     state.nodes.clear();
     state.animation = null;
+    state.focusedNodeId = null;
+    state.hoveredNodeId = null;
 
     if (!snapshot?.root) {
       throw new Error("Tree snapshot must include a root node");
@@ -289,7 +376,7 @@ export function createTreeRenderer({
   function collectStats(nodeId) {
     const node = state.nodes.get(nodeId);
     if (!node.children.length) {
-      node.stats = { weight: 1, spread: 0, girth: node.stats.girth };
+      node.stats = { weight: 1, spread: 0, girth: node.stats.girth, crown: 1 };
       return node.stats;
     }
 
@@ -299,8 +386,11 @@ export function createTreeRenderer({
       const child = state.nodes.get(node.children[index]);
       return sum + item.weight * (child.side || 0);
     }, 0);
+    const crown =
+      childStats.reduce((sum, item) => sum + item.crown, 0) +
+      Math.max(0, node.children.length - 1) * 0.65;
 
-    node.stats = { weight, spread, girth: node.stats.girth };
+    node.stats = { weight, spread, girth: node.stats.girth, crown };
     return node.stats;
   }
 
@@ -311,9 +401,11 @@ export function createTreeRenderer({
     const depthScale = Math.pow(0.81, Math.max(0, node.depth - 2));
     const vigor = 0.95 + Math.min(0.24, node.stats.weight * 0.06);
     const noise = 0.9 + node.seed.length * 0.18;
-    const crowdScale = lerp(1.02, 0.78, clamp((siblingCount - 1) / 4, 0, 1));
-    const centerlineBoost = 0.92 + (1 - Math.abs(node.side)) * 0.14;
-    return 98 * depthScale * vigor * noise * crowdScale * centerlineBoost;
+    const crowdScale = lerp(1.04, 0.84, clamp((siblingCount - 1) / 4, 0, 1));
+    const centerlineBoost = 0.92 + (1 - Math.abs(node.side)) * 0.12;
+    const crownReach = lerp(0.98, 1.2, clamp(node.stats.crown / 10, 0, 1));
+    const girthReach = lerp(0.96, 1.14, clamp(node.stats.girth / 18, 0, 1));
+    return 100 * depthScale * vigor * noise * crowdScale * centerlineBoost * crownReach * girthReach;
   }
 
   function thicknessFloor(node) {
@@ -340,7 +432,19 @@ export function createTreeRenderer({
         1 / 1.85,
       ) * (node.parentId ? 1.03 : 1.08);
 
-    node.stats.girth = Math.max(structuralFloor, combinedFlow);
+    if (!node.parentId) {
+      node.stats.girth = Math.max(structuralFloor, combinedFlow);
+      return node.stats.girth;
+    }
+
+    const parent = state.nodes.get(node.parentId);
+    const siblingCount = parent ? parent.children.length : 1;
+    const crowdPenalty = lerp(1, 0.7, clamp((siblingCount - 1) / 4, 0, 1));
+    const depthCap = 13.6 * Math.pow(0.83, Math.max(0, node.depth - 1));
+    const crownAllowance = 3.8 + Math.sqrt(node.stats.crown) * 2.3;
+    const girthCap = Math.max(structuralFloor, (depthCap + crownAllowance) * crowdPenalty);
+
+    node.stats.girth = clamp(Math.max(structuralFloor, combinedFlow), structuralFloor, girthCap);
     return node.stats.girth;
   }
 
@@ -356,16 +460,14 @@ export function createTreeRenderer({
     return Math.max(1.05, child.render.thickness * continuity);
   }
 
-  function nextAngleFor(parent, node, index, siblingCount) {
+  function nextAngleFor(parent, node, offset, siblingCount) {
     if (node.slot === "trunk") {
-      const offset = childSpreadOffset(index, siblingCount);
       const spread = lerp(0.22, 0.64, clamp((siblingCount - 1) / 4, 0, 1));
       return -Math.PI / 2 + offset * spread + node.seed.lean * 0.05;
     }
 
     const outwardBias = clamp((parent.target.x - ROOT_X) / 330, -1, 1) * 0.12;
     const upBias = clamp(parent.depth / 6, 0, 1);
-    const offset = childSpreadOffset(index, siblingCount);
     const fan = childFanSpread(node, siblingCount);
     const weightTuck = clamp(node.stats.weight / 20, 0, 0.12);
     const selfBalance =
@@ -407,9 +509,10 @@ export function createTreeRenderer({
 
     const children = node.children.map((childId) => state.nodes.get(childId));
     const siblingCount = children.length;
+    const offsets = childLayoutOffsets(node);
 
     children.forEach((child, index) => {
-      const angle = nextAngleFor(node, child, index, siblingCount);
+      const angle = nextAngleFor(node, child, offsets[index], siblingCount);
       const length = branchLength(child);
       const position = pointAtAngle(node.target, angle, length);
 
@@ -715,6 +818,45 @@ export function createTreeRenderer({
     branchGroup.append(core, highlight);
   }
 
+  function attachNodeInteractions(target, node) {
+    target.addEventListener("mouseenter", () => setHoveredNode(node.id));
+    target.addEventListener("mouseleave", () => clearHoveredNode(node.id));
+    target.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleFocusNode(node.id);
+    });
+  }
+
+  function drawHoverTooltip(node) {
+    const topic = node.label || "Untitled topic";
+    const text = createSvgElement("text", {
+      x: (node.render.x + 16).toFixed(2),
+      y: (node.render.y - 16).toFixed(2),
+      class: "topic-tooltip-text",
+    });
+    text.textContent = topic;
+    nodeGroup.append(text);
+
+    const bbox = text.getBBox();
+    const paddingX = 10;
+    const paddingY = 6;
+    const left = clamp(bbox.x - paddingX, 8, WIDTH - bbox.width - paddingX * 2 - 8);
+    const top = clamp(bbox.y - paddingY, 8, HEIGHT - bbox.height - paddingY * 2 - 8);
+    text.setAttribute("x", (left + paddingX).toFixed(2));
+    text.setAttribute("y", (top + paddingY + bbox.height - 4).toFixed(2));
+
+    const plate = createSvgElement("rect", {
+      x: left.toFixed(2),
+      y: top.toFixed(2),
+      width: (bbox.width + paddingX * 2).toFixed(2),
+      height: (bbox.height + paddingY * 2).toFixed(2),
+      rx: 12,
+      class: "topic-tooltip-plate",
+    });
+
+    nodeGroup.insertBefore(plate, text);
+  }
+
   function drawScene(now) {
     branchBackdrop.replaceChildren();
     branchGroup.replaceChildren();
@@ -722,6 +864,8 @@ export function createTreeRenderer({
     nodeGroup.replaceChildren();
 
     const nodes = [...state.nodes.values()].sort((a, b) => a.depth - b.depth);
+    const focusedIds = focusSet();
+    const focusActive = Boolean(focusedIds);
     const root = state.nodes.get(state.rootId);
     if (root) {
       drawRootBase(root);
@@ -730,22 +874,23 @@ export function createTreeRenderer({
     for (const node of nodes) {
       if (!node.parentId) continue;
       const parent = state.nodes.get(node.parentId);
+      const isDimmed = focusActive && !focusedIds.has(node.id);
       const geometry = branchGeometry(parent, node);
       const shadow = createSvgElement("path", {
         d: branchOutlinePath(parent, node, geometry, 1.16),
         class: "branch-shadow",
-        opacity: 0.92,
+        opacity: isDimmed ? 0.08 : 0.92,
       });
       const core = createSvgElement("path", {
         d: branchOutlinePath(parent, node, geometry),
         class: "branch-core",
-        opacity: 0.98,
+        opacity: isDimmed ? 0.16 : 0.98,
       });
       const highlight = createSvgElement("path", {
         d: geometry.centerline,
         class: "branch-highlight",
         "stroke-width": Math.max(0.9, branchEndWidth(node) * 0.22).toFixed(2),
-        opacity: clamp(0.2 + node.render.visibility * 0.16, 0.1, 0.32),
+        opacity: isDimmed ? 0.04 : clamp(0.2 + node.render.visibility * 0.16, 0.1, 0.32),
       });
 
       if (node.render.visibility < 1) {
@@ -760,23 +905,43 @@ export function createTreeRenderer({
     }
 
     for (const node of nodes) {
-      if (!node.parentId) continue;
+      const isDimmed = focusActive && !focusedIds.has(node.id);
+
+      if (!node.parentId) {
+        const rootHit = createSvgElement("circle", {
+          cx: node.render.x.toFixed(2),
+          cy: node.render.y.toFixed(2),
+          r: Math.max(18, node.render.thickness * 0.8).toFixed(2),
+          class: "topic-hit",
+        });
+        attachNodeInteractions(rootHit, node);
+        nodeGroup.append(rootHit);
+        continue;
+      }
 
       const glow = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
         r: Math.max(2.2, node.render.thickness * 0.42).toFixed(2),
         class: "node-glow",
-        opacity: 0.46,
+        opacity: isDimmed ? 0.09 : 0.46,
       });
       const core = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
         r: Math.max(1.7, node.render.thickness * 0.18).toFixed(2),
         class: "node-core",
+        opacity: isDimmed ? 0.18 : 1,
       });
+      const hit = createSvgElement("circle", {
+        cx: node.render.x.toFixed(2),
+        cy: node.render.y.toFixed(2),
+        r: Math.max(10, node.render.thickness * 0.9).toFixed(2),
+        class: "topic-hit",
+      });
+      attachNodeInteractions(hit, node);
 
-      nodeGroup.append(glow, core);
+      nodeGroup.append(glow, core, hit);
 
       if (!node.children.length) {
         const bud = createSvgElement("circle", {
@@ -784,7 +949,7 @@ export function createTreeRenderer({
           cy: (node.render.y + Math.sin(node.render.angle) * 6).toFixed(2),
           r: 4.7,
           class: "blossom-bud",
-          opacity: 0.88,
+          opacity: isDimmed ? 0.14 : 0.88,
         });
         nodeGroup.append(bud);
       }
@@ -794,6 +959,7 @@ export function createTreeRenderer({
 
     for (const node of nodes) {
       if (!canExpand(node)) continue;
+      if (focusActive && !focusedIds.has(node.id)) continue;
       if (state.animation && node.id === state.animation.sourceId) continue;
 
       const anchor = growthBudAnchor(node);
@@ -812,26 +978,26 @@ export function createTreeRenderer({
 
       const glow = createSvgElement("circle", {
         class: "tip-glow",
-        r: 18,
-        opacity: 0.9,
+        r: 10,
+        opacity: 0.78,
       });
       const ring = createSvgElement("circle", {
         class: "tip-ring",
-        r: 11.5,
+        r: 6.9,
       });
       const plusH = createSvgElement("line", {
         class: "tip-plus",
-        x1: -4.2,
+        x1: -2.6,
         y1: 0,
-        x2: 4.2,
+        x2: 2.6,
         y2: 0,
       });
       const plusV = createSvgElement("line", {
         class: "tip-plus",
         x1: 0,
-        y1: -4.2,
+        y1: -2.6,
         x2: 0,
-        y2: 4.2,
+        y2: 2.6,
       });
 
       if (!globallyDisabled && !node.ui.loading) {
@@ -847,6 +1013,10 @@ export function createTreeRenderer({
       tipButton.append(glow, ring, plusH, plusV);
       tipGroup.append(tipButton);
     }
+
+    if (state.hoveredNodeId && state.nodes.has(state.hoveredNodeId)) {
+      drawHoverTooltip(state.nodes.get(state.hoveredNodeId));
+    }
   }
 
   function growthBudAnchor(node) {
@@ -855,8 +1025,9 @@ export function createTreeRenderer({
       angle = -Math.PI / 2;
     } else {
       const nextCount = node.children.length + 1;
-      const nextIndex = node.children.length;
-      const offset = childSpreadOffset(nextIndex, nextCount);
+      const projectedOffsets = [...childLayoutOffsets(node), 0];
+      projectedOffsets.sort((a, b) => a - b);
+      const offset = projectedOffsets[projectedOffsets.length - 1] || childSpreadOffset(node.children.length, nextCount);
       const fan = childFanSpread(node, nextCount);
       const outwardBias = clamp((node.render.x - ROOT_X) / 330, -1, 1) * 0.11;
       angle =
@@ -899,6 +1070,7 @@ export function createTreeRenderer({
       expandable: node.expandable,
       path: buildPath(nodeId),
       existingChildren: node.children.map((childId) => state.nodes.get(childId)?.label).filter(Boolean),
+      focusedNodeId: state.focusedNodeId,
     };
   }
 
@@ -929,6 +1101,8 @@ export function createTreeRenderer({
 
   return {
     appendChildren,
+    clearFocus,
+    focusNode,
     getNodeContext,
     getSnapshot,
     patchNode,

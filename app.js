@@ -32,8 +32,18 @@ window.treeApp = {
   seed(topic) {
     return controller.seed(topic);
   },
+  async seedWithApi(topic, options = {}) {
+    controller.setProvider(new ApiTreeProvider(options));
+    return controller.seed(topic);
+  },
   expand(nodeId) {
     return controller.expand(nodeId);
+  },
+  focusNode(nodeId) {
+    controller.focusNode(nodeId);
+  },
+  clearFocus() {
+    controller.clearFocus();
   },
   hydrate(snapshot) {
     controller.hydrate(snapshot);
@@ -48,3 +58,9 @@ window.treeApp = {
     controller.setProvider(new ApiTreeProvider(options));
   },
 };
+
+// Example:
+// await window.treeApp.seedWithApi("Linear Algebra", {
+//   seedUrl: "/api/tree/seed",
+//   expandUrl: "/api/tree/expand",
+// });
