@@ -51,9 +51,7 @@ body {
 body {
   position: relative;
   color: var(--page-ink);
-  background:
-    radial-gradient(circle at top, rgba(125, 202, 216, 0.34), transparent 34%),
-    linear-gradient(180deg, #f5ede8 0%, #eef4f1 42%, #d9e7eb 100%);
+  background: #0f1012 100%;
   font-family: "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -61,9 +59,11 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 240 240'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' fill='%239da4a8' filter='url(%23noise)' opacity='0.14'/%3E%3C/svg%3E");
-  background-size: 220px 220px;
-  opacity: 0.24;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 18%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 240 240'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' fill='%236b6470' filter='url(%23noise)' opacity='0.1'/%3E%3C/svg%3E");
+  background-size: auto, 220px 220px;
+  opacity: 0.34;
   pointer-events: none;
   z-index: 0;
 }
@@ -161,6 +161,14 @@ body::before {
   margin: 10px 0 0;
   color: rgba(74, 98, 128, 0.9);
   font: 400 13px/1.65 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+.node-info-hint {
+  margin: 10px 0 0;
+  color: var(--roof-red);
+  font: 700 11px/1.4 "Atkinson Hyperlegible", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .node-info-meta {

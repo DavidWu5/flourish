@@ -13,6 +13,11 @@ const MIDDLE_BRANCH_DURATION_MULTIPLIER = 0.76;
 const BRANCH_ENCHANT_TRAVEL_PORTION = 0.78;
 const BRANCH_ENCHANT_TRAIL_BASE = 0.16;
 const BRANCH_ENCHANT_TRAIL_MAX = 0.42;
+const HORIZONTAL_FAN_SPREAD_MULTIPLIER = 1.24;
+const CHILD_LAYOUT_GAP_BASE = 1.04;
+const CHILD_LAYOUT_GAP_DEPTH_BONUS = 0.16;
+const ROOT_LATERAL_PUSH_MAX = 118;
+const BRANCH_CROWD_LENGTH_BOOST = 0.14;
 const EMPHASIS_FADE_DURATION = 180;
 const BRANCH_RENDER_SCALE = 0.9;
 const BRANCH_GRADIENT_LAYERS = 12;
@@ -234,7 +239,11 @@ export function createTreeRenderer({
   function childFanSpread(node, count) {
     const density = clamp((count - 1) / 4, 0, 1);
     const depthT = clamp(node.depth / 7, 0, 1);
-    return lerp(0.34, 0.96, density) * lerp(1.08, 0.74, depthT);
+    return (
+      lerp(0.34, 0.96, density) *
+      lerp(1.08, 0.74, depthT) *
+      HORIZONTAL_FAN_SPREAD_MULTIPLIER
+    );
   }
 
   function centerAffinityAt(x) {
@@ -252,7 +261,7 @@ export function createTreeRenderer({
       1 +
       trunkBoost +
       centerPressure * (0.16 + crownPressure * 0.24 + parentPressure * 0.14) +
-      crowdPressure * 0.08
+      crowdPressure * 0.18
     );
   }
 
@@ -263,7 +272,7 @@ export function createTreeRenderer({
     const weights = children.map((child) =>
       Math.max(1, child.stats.crown * 0.82 + child.stats.girth * 0.34),
     );
-    const gap = 0.74 + clamp(node.depth / 8, 0, 1) * 0.12;
+    const gap = CHILD_LAYOUT_GAP_BASE + clamp(node.depth / 8, 0, 1) * CHILD_LAYOUT_GAP_DEPTH_BONUS;
     const total = weights.reduce((sum, weight) => sum + weight, 0) + gap * (weights.length - 1);
 
     let cursor = -total / 2;
@@ -662,7 +671,9 @@ export function createTreeRenderer({
     const depthScale = Math.pow(0.81, Math.max(0, node.depth - 2));
     const vigor = 0.95 + Math.min(0.24, node.stats.weight * 0.06);
     const noise = 0.9 + node.seed.length * 0.18;
-    const crowdScale = lerp(1.04, 0.84, clamp((siblingCount - 1) / 4, 0, 1));
+    const crowdScale =
+      lerp(1.04, 0.92, clamp((siblingCount - 1) / 4, 0, 1)) +
+      clamp((siblingCount - 1) / 4, 0, 1) * BRANCH_CROWD_LENGTH_BOOST;
     const centerCrowding = (1 - Math.abs(node.side)) * clamp((node.stats.crown - 1) / 9, 0, 1);
     const centerlineBoost = 0.97 + Math.abs(node.side) * 0.06 - centerCrowding * 0.12;
     const crownReach = lerp(0.98, 1.2, clamp(node.stats.crown / 10, 0, 1));
@@ -724,7 +735,7 @@ export function createTreeRenderer({
 
   function nextAngleFor(parent, node, offset, siblingCount) {
     if (node.slot === "trunk") {
-      const spread = lerp(0.22, 0.64, clamp((siblingCount - 1) / 4, 0, 1));
+      const spread = lerp(0.28, 0.78, clamp((siblingCount - 1) / 4, 0, 1));
       const dynamicSpread =
         spread * (1 + centerAffinityAt(ROOT_X) * 0.12 + clamp((node.stats.crown - 1) / 8, 0, 1) * 0.18);
       return -Math.PI / 2 + offset * dynamicSpread + node.seed.lean * 0.05;
@@ -781,7 +792,7 @@ export function createTreeRenderer({
         )
       : 0;
     const rootLateralPush = !node.parentId
-      ? lerp(0, 72, clamp((rootCenterMass - 1.4) / 8.5, 0, 1))
+      ? lerp(0, ROOT_LATERAL_PUSH_MAX, clamp((rootCenterMass - 1.4) / 8.5, 0, 1))
       : 0;
 
     children.forEach((child, index) => {
@@ -1534,11 +1545,6 @@ export function createTreeRenderer({
   function attachNodeInteractions(target, node) {
     target.addEventListener("mouseenter", () => setHoverState(node.id, node.id));
     target.addEventListener("mouseleave", () => clearHoverState(node.id, node.id));
-    target.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setSelectedNode(node.id);
-    });
   }
 
   function attachBranchInteractions(target, nodeId) {

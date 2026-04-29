@@ -22,6 +22,7 @@ const renderer = createTreeRenderer({
 const buildBanner = document.querySelector("#buildBanner");
 const nodeInfoTitle = document.querySelector("#nodeInfoTitle");
 const nodeInfoSummary = document.querySelector("#nodeInfoSummary");
+const nodeInfoHint = document.querySelector("#nodeInfoHint");
 const nodeInfoPath = document.querySelector("#nodeInfoPath");
 const nodeInfoDepth = document.querySelector("#nodeInfoDepth");
 const nodeInfoChildren = document.querySelector("#nodeInfoChildren");
@@ -45,6 +46,8 @@ const panState = {
   hasMoved: false,
   lastDragEndedAt: 0,
 };
+
+let hoveredNode = null;
 
 function formatMetadataLabel(key) {
   return String(key)
@@ -165,12 +168,15 @@ function setupViewportPan() {
 }
 
 function renderNodeInfo(node) {
+  hoveredNode = node;
+
   if (!node) {
     if (nodeInfoTitle) nodeInfoTitle.textContent = "Hover a node";
     if (nodeInfoSummary) {
       nodeInfoSummary.textContent =
         "Move over any topic node to inspect its details from the tree data.";
     }
+    if (nodeInfoHint) nodeInfoHint.textContent = "Press Space to view the full description.";
     if (nodeInfoPath) nodeInfoPath.textContent = "No node selected";
     if (nodeInfoDepth) nodeInfoDepth.textContent = "--";
     if (nodeInfoChildren) nodeInfoChildren.textContent = "--";
@@ -184,6 +190,9 @@ function renderNodeInfo(node) {
   if (nodeInfoSummary) {
     nodeInfoSummary.textContent =
       node.summary || "No summary was returned for this node yet.";
+  }
+  if (nodeInfoHint) {
+    nodeInfoHint.textContent = "Press Space to view the full description.";
   }
   if (nodeInfoPath) nodeInfoPath.textContent = node.path.join(" / ");
   if (nodeInfoDepth) nodeInfoDepth.textContent = String(node.depth);
@@ -260,23 +269,36 @@ function setupNodeDetailPanel() {
   });
 }
 
+function setupSpacebarDetailShortcut() {
+  window.addEventListener("keydown", (event) => {
+    if (event.key !== " ") return;
+    if (!hoveredNode) return;
+    if (event.repeat) return;
+    if (
+      event.target instanceof HTMLElement &&
+      (event.target.closest("button") ||
+        event.target.closest("input") ||
+        event.target.closest("textarea") ||
+        event.target.closest("select"))
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    openNodeDetail(hoveredNode);
+  });
+}
+
 if (buildBanner) {
   buildBanner.textContent = BUILD_VERSION;
 }
 renderNodeInfo(null);
 setupViewportPan();
 setupNodeDetailPanel();
+setupSpacebarDetailShortcut();
 
 renderer.setHoverHandler((node) => {
   renderNodeInfo(node);
-});
-renderer.setNodeSelectHandler((node) => {
-  if (performance.now() - panState.lastDragEndedAt < 140) return;
-  if (!node) {
-    closeNodeDetail();
-    return;
-  }
-  openNodeDetail(node);
 });
 
 const controller = new TreeController({
