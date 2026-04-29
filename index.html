@@ -8,6 +8,10 @@
   </head>
   <body>
     <main class="app-shell">
+      <div class="app-brand" aria-label="Flourish">
+        <img class="app-brand-logo" src="./logo-flourish.svg" alt="" aria-hidden="true" />
+        <span class="app-brand-name">flourish</span>
+      </div>
       <p class="build-banner" id="buildBanner">Loading latest build...</p>
       <section class="canvas-frame" id="canvasFrame">
         <svg
@@ -17,19 +21,62 @@
           role="img"
         >
           <g id="treeViewport">
-            <g id="treeMotion">
-              <g id="branchBackdrop"></g>
-              <g id="branchGroup"></g>
-              <g id="tipGroup"></g>
-              <g id="nodeGroup"></g>
+            <g id="treeZoomGroup">
+              <g id="treeMotion">
+                <g id="branchBackdrop"></g>
+                <g id="branchGroup"></g>
+                <g id="tipGroup"></g>
+                <g id="nodeGroup"></g>
+              </g>
+              <path
+                d="M -10000 688
+                  Q -9500 676 -9000 688
+                  T -8000 688
+                  T -7000 688
+                  T -6000 688
+                  T -5000 688
+                  T -4000 688
+                  T -3000 688
+                  T -2000 688
+                  T -1000 688
+                  T 0 688
+                  T 1000 688
+                  T 2000 688
+                  T 3000 688
+                  T 4000 688
+                  T 5000 688
+                  T 6000 688
+                  T 7000 688
+                  T 8000 688
+                  T 9000 688
+                  T 10000 688
+                  L 10000 20000
+                  L -10000 20000
+                  Z"
+                fill="var(--green)"
+                aria-hidden="true"
+              ></path>
+              <g id="treeBaseLabelGroup" aria-hidden="true"></g>
             </g>
-            <rect x="-10000" y="688" width="20000" height="20000" fill="var(--green)" aria-hidden="true"></rect>
           </g>
         </svg>
+        <div class="petal-particles" id="petalParticles" aria-hidden="true"></div>
 
-        <div class="canvas-hint" id="canvasHint">Drag the tree to move the viewport</div>
+        <div class="canvas-zoom" role="group" aria-label="Tree zoom controls">
+          <button class="canvas-zoom-button" id="zoomOutButton" type="button" aria-label="Zoom out">
+            -
+          </button>
+          <button class="canvas-zoom-readout" id="zoomResetButton" type="button" aria-label="Reset zoom to 100%">
+            100%
+          </button>
+          <button class="canvas-zoom-button" id="zoomInButton" type="button" aria-label="Zoom in">
+            +
+          </button>
+        </div>
 
-        <aside class="node-info-panel" id="nodeInfoPanel" aria-live="polite">
+        <div class="canvas-hint" id="canvasHint">Drag to move. Scroll or use + / - to zoom.</div>
+
+        <aside class="node-info-panel" id="nodeInfoPanel" aria-live="polite" hidden>
           <p class="node-info-eyebrow">Node details</p>
           <h2 class="node-info-title" id="nodeInfoTitle">Hover a node</h2>
           <p class="node-info-summary" id="nodeInfoSummary">
@@ -85,32 +132,31 @@
             <div class="node-detail-body" id="nodeDetailBody"></div>
           </section>
         </div>
+
+        <div class="topic-modal" id="topicModal" hidden>
+          <section class="topic-modal-card">
+            <h2 class="topic-modal-title" id="topicModalTitle">What do you want to learn</h2>
+
+            <form class="topic-modal-form" id="topicForm">
+              <label class="topic-modal-label" for="topicInput">Topic</label>
+              <input
+                class="topic-modal-input"
+                id="topicInput"
+                name="topic"
+                type="text"
+                placeholder="Linear algebra"
+                autocomplete="off"
+                enterkeyhint="go"
+              />
+              <button class="topic-modal-submit" id="topicSubmit" type="submit">
+                Start
+              </button>
+            </form>
+
+            <p class="topic-modal-status" id="topicStatus" hidden></p>
+          </section>
+        </div>
       </section>
-
-      <aside class="mascot-dock" id="mascotDock" aria-live="polite">
-        <div class="mascot-bubble" id="mascotBubble">
-          <p class="mascot-bubble-label" id="mascotStateLabel">Guide dock</p>
-          <p class="mascot-bubble-copy" id="mascotSpeech">
-            The diagnostic guide lives here. Next step: wire questions into each branch.
-          </p>
-        </div>
-
-        <div class="mascot-stage" id="mascotStage" aria-hidden="true" data-state="idle">
-          <span class="mascot-halo"></span>
-          <span class="mascot-petal mascot-petal-top"></span>
-          <span class="mascot-petal mascot-petal-left"></span>
-          <span class="mascot-petal mascot-petal-right"></span>
-          <span class="mascot-core"></span>
-          <span class="mascot-eye mascot-eye-left"></span>
-          <span class="mascot-eye mascot-eye-right"></span>
-          <span class="mascot-smile"></span>
-        </div>
-
-        <div class="mascot-caption">
-          <p class="mascot-name">Flourish Guide</p>
-          <p class="mascot-status" id="mascotStatus">Idle state scaffold</p>
-        </div>
-      </aside>
 
       <section class="question-panel" id="questionPanel" hidden aria-labelledby="questionTitle">
         <div class="question-panel-card">
@@ -153,49 +199,6 @@
         </div>
       </section>
 
-      <div class="topic-modal" id="topicModal" hidden>
-        <section
-          class="topic-modal-card"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="topicModalTitle"
-        >
-          <div class="topic-modal-copy">
-            <p class="topic-modal-eyebrow">Start a new learning tree</p>
-            <h2 class="topic-modal-title" id="topicModalTitle">What do you want to grow?</h2>
-            <p class="topic-modal-body">
-              Enter a topic, let the first branches bloom, and then test understanding one node
-              at a time.
-            </p>
-          </div>
-
-          <form class="topic-modal-form" id="topicForm">
-            <label class="topic-modal-label" for="topicInput">Topic</label>
-            <div class="topic-modal-controls">
-              <input
-                class="topic-modal-input"
-                id="topicInput"
-                name="topic"
-                type="text"
-                placeholder="Linear Algebra, Photosynthesis, Jazz Theory..."
-                autocomplete="off"
-              />
-              <button class="topic-modal-submit" id="topicSubmit" type="submit">
-                Grow the tree
-              </button>
-            </div>
-          </form>
-
-          <p class="topic-modal-status" id="topicStatus" hidden></p>
-
-          <div class="topic-modal-suggestions" aria-label="Suggested topics">
-            <button class="topic-chip" type="button">Linear Algebra</button>
-            <button class="topic-chip" type="button">Photosynthesis</button>
-            <button class="topic-chip" type="button">Neural Networks</button>
-            <button class="topic-chip" type="button">Jazz Harmony</button>
-          </div>
-        </section>
-      </div>
     </main>
 
     <script type="module" src="./app.js"></script>

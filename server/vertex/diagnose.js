@@ -11,7 +11,7 @@ const DIAGNOSIS_SCHEMA = {
     tree_action: { type: 'STRING' },
     misconception: { type: 'STRING' },
     missing_prerequisite: { type: 'STRING' },
-    mascot_response: { type: 'STRING' },
+    feedback_message: { type: 'STRING' },
     new_node: {
       type: 'OBJECT',
       properties: {
@@ -29,7 +29,7 @@ const DIAGNOSIS_SCHEMA = {
     'tree_action',
     'misconception',
     'missing_prerequisite',
-    'mascot_response',
+    'feedback_message',
     'new_node',
   ],
 };
@@ -183,7 +183,7 @@ function fallbackDiagnosis(payload) {
       tree_action: 'insert_prerequisite_node',
       misconception: `The answer does not yet show a working mental model for ${nodeLabel}.`,
       missing_prerequisite: prerequisite.title,
-      mascot_response: "Something's missing — let's grow that support branch first.",
+      feedback_message: "Something's missing — let's grow that support branch first.",
       new_node: {
         id: ensureUniqueId(`${nodeId}--prerequisite`, payload.existingNodeIds),
         ...prerequisite,
@@ -197,7 +197,7 @@ function fallbackDiagnosis(payload) {
       tree_action: 'continue',
       misconception: '',
       missing_prerequisite: '',
-      mascot_response: 'Nice — this branch is strong.',
+      feedback_message: 'Nice — this branch is strong.',
       new_node: null,
     };
   }
@@ -208,7 +208,7 @@ function fallbackDiagnosis(payload) {
       tree_action: 'continue',
       misconception: `The answer gestures toward ${nodeLabel}, but the explanation is still too thin or imprecise.`,
       missing_prerequisite: '',
-      mascot_response: `You're close — tighten the explanation of ${nodeLabel} and try again.`,
+      feedback_message: `You're close — tighten the explanation of ${nodeLabel} and try again.`,
       new_node: null,
     };
   }
@@ -219,7 +219,7 @@ function fallbackDiagnosis(payload) {
     tree_action: 'insert_prerequisite_node',
     misconception: `The answer is missing the underlying idea that makes ${nodeLabel} make sense.`,
     missing_prerequisite: prerequisite.title,
-    mascot_response: "Let's strengthen the roots before we push this branch further.",
+    feedback_message: "Let's strengthen the roots before we push this branch further.",
     new_node: {
       id: ensureUniqueId(`${nodeId}--prerequisite`, payload.existingNodeIds),
       ...prerequisite,
@@ -247,7 +247,7 @@ function normalizeDiagnosis(payload, raw) {
     tree_action: action,
     misconception: String(raw.misconception || '').trim(),
     missing_prerequisite: String(raw.missing_prerequisite || '').trim(),
-    mascot_response: String(raw.mascot_response || '').trim(),
+    feedback_message: String(raw.feedback_message || '').trim(),
     new_node: null,
   };
 
@@ -289,7 +289,7 @@ async function maybeDiagnoseWithVertex(payload) {
       `Existing node ids: ${existingNodeIds.join(', ') || '(none)'}`,
       'Classify the answer as correct, partial, or wrong.',
       'If a missing prerequisite is blocking progress, set tree_action to insert_prerequisite_node and return a compact prerequisite node.',
-      "Mascot voice: under 40 words, action-oriented, no lectures.",
+      'Feedback message: under 40 words, action-oriented, no lectures.',
       "If the answer is empty or 'idk', treat it as wrong.",
     ].join('\n'),
     schema: DIAGNOSIS_SCHEMA,

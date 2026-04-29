@@ -6,8 +6,10 @@ function createDefaultProvider() {
 
 export function setupTopicEntry({
   controller,
-  mascot = null,
   resetViewport = () => {},
+  focusTree = () => {},
+  animateTreeTopic = () => {},
+  onTopicSeeded = () => {},
   createProvider = createDefaultProvider,
   defaultTopic = "",
 } = {}) {
@@ -24,6 +26,10 @@ export function setupTopicEntry({
 
   const idleSubmitLabel = submitButton.textContent || "Grow the tree";
   let isSubmitting = false;
+
+  function setExiting(nextExiting) {
+    modal.classList.toggle("is-exiting", nextExiting);
+  }
 
   function focusInput() {
     requestAnimationFrame(() => {
@@ -51,15 +57,16 @@ export function setupTopicEntry({
 
   function open() {
     modal.hidden = false;
+    setExiting(false);
     if (defaultTopic && !input.value.trim()) {
       input.value = defaultTopic;
     }
-    mascot?.setState("idle");
-    mascot?.say("Pick a topic and I’ll grow the first branches for you.");
+    focusTree({ behavior: "auto" });
     focusInput();
   }
 
   function close() {
+    setExiting(false);
     modal.hidden = true;
     setStatus("", { hidden: true });
   }
@@ -77,18 +84,16 @@ export function setupTopicEntry({
     }
 
     input.value = topic;
+    setExiting(true);
     setBusyState(true);
     setStatus("Planting the root...");
-    mascot?.setState("asking", {
-      status: `Planting ${topic}`,
-      speech: `Starting with ${topic}. Let me anchor the root.`,
-    });
 
     try {
       resetViewport();
       controller.setProvider(createProvider());
 
       await controller.seed(topic);
+      onTopicSeeded(controller.getSnapshot(), topic);
 
       const snapshot = controller.getSnapshot();
       const rootId = snapshot?.root?.id;
@@ -97,15 +102,12 @@ export function setupTopicEntry({
         throw new Error("Seed response did not include a root node.");
       }
 
+      animateTreeTopic(topic);
       setStatus("Growing the first foundational branches...");
-      mascot?.say("Now I’m growing the first foundational branches.");
       await controller.expand(rootId);
 
-      mascot?.setState("happy", {
-        status: `${topic} is ready to explore`,
-      });
-      mascot?.say("The first branches are ready. Start exploring from the blossoms.", 3200);
       close();
+      focusTree({ behavior: "smooth" });
       return true;
     } catch (error) {
       console.error("Topic entry failed", error);
@@ -114,10 +116,7 @@ export function setupTopicEntry({
           ? error.message
           : "Something went wrong while growing the topic.";
       setStatus(message);
-      mascot?.setState("concerned", {
-        status: "Topic growth stalled",
-        speech: message,
-      });
+      setExiting(false);
       focusInput();
       return false;
     } finally {

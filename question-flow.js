@@ -27,7 +27,6 @@ function findNodeRecord(snapshot, nodeId) {
 export function setupQuestionFlow({
   controller,
   renderer,
-  mascot = null,
   getApi = createDefaultApi,
 } = {}) {
   const panel = document.querySelector("#questionPanel");
@@ -142,31 +141,16 @@ export function setupQuestionFlow({
     const question = getPanelQuestion(node);
     if (!question) {
       hidePanel();
-      mascot?.setState("idle", {
-        status: "Choose a blossom",
-        speech:
-          node.depth === 0
-            ? "Start with one of the blossom nodes. The root doesn't have a diagnostic question."
-            : "This branch does not have a diagnostic question yet.",
-      });
       return;
     }
 
     const lockedMessage = getLockedMessage(node);
     if (lockedMessage) {
       hidePanel();
-      mascot?.setState("concerned", {
-        status: `${node.label} is waiting`,
-        speech: lockedMessage,
-      });
       return;
     }
 
     showPanel(node);
-    mascot?.setState("asking", {
-      status: `Checking ${node.label}`,
-      speech: "Let's check this branch before it grows further.",
-    });
   }
 
   function patchNodeMetadata(nodeId, updater) {
@@ -224,10 +208,6 @@ export function setupQuestionFlow({
 
     setSubmitting(true);
     setPanelStatus("Checking understanding...", "info");
-    mascot?.setState("asking", {
-      status: `Checking ${node.label}`,
-      speech: "Let me see whether this branch is sturdy or needs another root beneath it.",
-    });
 
     try {
       const api = typeof getApi === "function" ? getApi() : createDefaultApi();
@@ -267,12 +247,6 @@ export function setupQuestionFlow({
           prerequisiteNodeId: prerequisiteNode.id,
         }));
         appendPrerequisiteNode(node.id, prerequisiteNode);
-        mascot?.setState("concerned", {
-          status: `${node.label} needs support`,
-          speech:
-            diagnosis.mascot_response ||
-            "Something's missing — let's grow that prerequisite first.",
-        });
         hidePanel();
         return;
       }
@@ -284,25 +258,12 @@ export function setupQuestionFlow({
           prerequisiteNodeId: null,
         }));
         unlockParentIfPrerequisiteComplete(node.id);
-        mascot?.setState("happy", {
-          status: `${node.label} is strong`,
-        });
-        mascot?.say(
-          diagnosis.mascot_response || "Nice — this branch is strong.",
-          3200,
-        );
         hidePanel();
         return;
       }
 
-      mascot?.setState("concerned", {
-        status: `Revisit ${node.label}`,
-        speech:
-          diagnosis.mascot_response ||
-          "Not quite yet — take another swing at this branch.",
-      });
       setPanelStatus(
-        diagnosis.mascot_response ||
+        diagnosis.feedback_message ||
           "Not quite yet — take another swing at this branch.",
         "warning",
       );
@@ -313,10 +274,6 @@ export function setupQuestionFlow({
         error instanceof Error && error.message
           ? error.message
           : "Something went wrong while checking this answer.";
-      mascot?.setState("concerned", {
-        status: "Check stalled",
-        speech: message,
-      });
       setPanelStatus(message, "error");
     } finally {
       setSubmitting(false);
@@ -325,10 +282,6 @@ export function setupQuestionFlow({
 
   function handleClose() {
     hidePanel();
-    mascot?.setState("idle", {
-      status: "Choose another blossom",
-      speech: "Pick another branch whenever you're ready.",
-    });
   }
 
   form.addEventListener("submit", (event) => {

@@ -3,7 +3,13 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const WIDTH = 1000;
 const HEIGHT = 720;
 const ROOT_X = WIDTH / 2;
-const ROOT_Y = HEIGHT - 48;
+const ROOT_Y = HEIGHT - 130;
+const TRUNK_BRANCH_LENGTH = 142;
+const TRUNK_SPREAD_MIN = 0.18;
+const TRUNK_SPREAD_MAX = 0.48;
+const ROOT_BASE_LENGTH = 150;
+const ROOT_BASE_START_WIDTH_MULTIPLIER = 3.18;
+const ROOT_BASE_END_WIDTH_MULTIPLIER = 1.24;
 const GROW_DURATION = 1250;
 const GROW_DURATION_VARIANCE = 320;
 const GROW_STAGGER_BASE = 82;
@@ -20,16 +26,11 @@ const ROOT_LATERAL_PUSH_MAX = 118;
 const BRANCH_CROWD_LENGTH_BOOST = 0.14;
 const EMPHASIS_FADE_DURATION = 180;
 const BRANCH_RENDER_SCALE = 0.9;
-const BRANCH_GRADIENT_LAYERS = 12;
 const DIMMED_TREE_OPACITY = 0.18;
-const BRANCH_NOISE_FILTER_ID = "branch-bark-noise";
 // Flip this to false for a perfectly still branch silhouette.
 const BRANCH_TURBULENCE_ENABLED = true;
 const BRANCH_TURBULENCE_SPEED = 0.00052;
 const BRANCH_TURBULENCE_STRENGTH = 0.5;
-const BRANCH_EDGE_RGB = { r: 96, g: 58, b: 38 };
-const BRANCH_CENTER_RGB = { r: 171, g: 124, b: 90 };
-const BRANCH_HIGHLIGHT_RGB = { r: 225, g: 192, b: 150 };
 const ENCHANT_GLOW_RGB = { r: 232, g: 240, b: 240 };
 const ENCHANT_CORE_RGB = { r: 242, g: 189, b: 208 };
 const ENCHANT_SPARK_RGB = { r: 125, g: 202, b: 216 };
@@ -41,9 +42,6 @@ export function createTreeRenderer({
   tipGroup,
   nodeGroup,
 }) {
-  const defs = createSvgElement("defs");
-  svg.insertBefore(defs, svg.firstChild);
-
   const state = {
     nodes: new Map(),
     rootId: null,
@@ -51,6 +49,7 @@ export function createTreeRenderer({
     emphasisAnimation: null,
     rafId: 0,
     lastNow: performance.now(),
+    viewportScale: 1,
     hoverPathNodeId: null,
     hoveredNodeId: null,
     selectedNodeId: null,
@@ -296,55 +295,6 @@ export function createTreeRenderer({
       element.setAttribute(key, String(value));
     }
     return element;
-  }
-
-  function createBranchNoiseFilter() {
-    const filter = createSvgElement("filter", {
-      id: BRANCH_NOISE_FILTER_ID,
-      x: "0%",
-      y: "0%",
-      width: "100%",
-      height: "100%",
-      filterUnits: "objectBoundingBox",
-      primitiveUnits: "objectBoundingBox",
-      colorInterpolationFilters: "sRGB",
-    });
-    filter.append(
-      createSvgElement("feTurbulence", {
-        type: "fractalNoise",
-        baseFrequency: "0.9",
-        numOctaves: "2",
-        seed: "11",
-        stitchTiles: "stitch",
-        result: "noise",
-      }),
-    );
-    filter.append(
-      createSvgElement("feColorMatrix", {
-        in: "noise",
-        type: "saturate",
-        values: "0",
-        result: "noiseMono",
-      }),
-    );
-    const noiseAlpha = createSvgElement("feComponentTransfer", {
-      in: "noiseMono",
-      result: "noiseGrain",
-    });
-    noiseAlpha.append(createSvgElement("feFuncR", { type: "gamma", amplitude: "1.15", exponent: "0.72", offset: "0" }));
-    noiseAlpha.append(createSvgElement("feFuncG", { type: "gamma", amplitude: "1.15", exponent: "0.72", offset: "0" }));
-    noiseAlpha.append(createSvgElement("feFuncB", { type: "gamma", amplitude: "1.15", exponent: "0.72", offset: "0" }));
-    noiseAlpha.append(createSvgElement("feFuncA", { type: "table", tableValues: "0 0.34" }));
-    filter.append(noiseAlpha);
-    filter.append(
-      createSvgElement("feComposite", {
-        in: "noiseGrain",
-        in2: "SourceAlpha",
-        operator: "in",
-        result: "grain",
-      }),
-    );
-    return filter;
   }
 
   function patchPublicNode(node, patch) {
@@ -616,6 +566,15 @@ export function createTreeRenderer({
     state.onNodeSelect = typeof handler === "function" ? handler : () => {};
   }
 
+  function setViewportScale(scale = 1) {
+    const nextScale = Math.max(0.01, Number(scale) || 1);
+    if (Math.abs(nextScale - state.viewportScale) < 0.001) return;
+    state.viewportScale = nextScale;
+    if (!state.animation) {
+      drawScene(state.lastNow);
+    }
+  }
+
   function setNodeLoading(nodeId, loading) {
     const node = state.nodes.get(nodeId);
     if (!node) return;
@@ -665,7 +624,7 @@ export function createTreeRenderer({
   }
 
   function branchLength(node) {
-    if (node.slot === "trunk") return 118;
+    if (node.slot === "trunk") return TRUNK_BRANCH_LENGTH;
 
     const siblingCount = node.parentId ? state.nodes.get(node.parentId).children.length : 1;
     const depthScale = Math.pow(0.81, Math.max(0, node.depth - 2));
@@ -735,7 +694,11 @@ export function createTreeRenderer({
 
   function nextAngleFor(parent, node, offset, siblingCount) {
     if (node.slot === "trunk") {
-      const spread = lerp(0.28, 0.78, clamp((siblingCount - 1) / 4, 0, 1));
+      const spread = lerp(
+        TRUNK_SPREAD_MIN,
+        TRUNK_SPREAD_MAX,
+        clamp((siblingCount - 1) / 4, 0, 1),
+      );
       const dynamicSpread =
         spread * (1 + centerAffinityAt(ROOT_X) * 0.12 + clamp((node.stats.crown - 1) / 8, 0, 1) * 0.18);
       return -Math.PI / 2 + offset * dynamicSpread + node.seed.lean * 0.05;
@@ -1345,107 +1308,24 @@ export function createTreeRenderer({
 
   function drawBranchSurface({
     paths,
-    barkTexture = [],
-    centerline,
-    highlightWidth,
-    gradientWidth,
-    clipId,
     visibility = 1,
     emphasis = 1,
   }) {
     const visibilityAlpha = clamp(visibility, 0, 1);
     const emphasisAlpha = clamp(emphasis, DIMMED_TREE_OPACITY, 1);
-    const shadowOpacity =
-      (visibilityAlpha < 1 ? 0.05 + visibilityAlpha * 0.12 : 0.18) * emphasisAlpha;
-    const shellOpacity = (visibilityAlpha < 1 ? visibilityAlpha : 0.98) * emphasisAlpha;
-    const gradientOpacity = visibilityAlpha * emphasisAlpha;
-    const highlightOpacity =
-      (visibilityAlpha < 1
-        ? visibilityAlpha * 0.18
-        : clamp(0.16 + visibilityAlpha * 0.12, 0.08, 0.28)) * emphasisAlpha;
-
-    const shadow = createSvgElement("path", {
-      d: paths.shadow,
-      class: "branch-shadow",
-      opacity: shadowOpacity.toFixed(3),
+    const shellOpacity = visibilityAlpha * emphasisAlpha;
+    const outlineGlow = createSvgElement("path", {
+      d: paths.shell,
+      class: "branch-outline-glow",
+      opacity: (shellOpacity * 0.92).toFixed(3),
     });
     const shell = createSvgElement("path", {
       d: paths.shell,
       class: "branch-shell",
       opacity: shellOpacity.toFixed(3),
     });
-    const clipPath = createSvgElement("clipPath", {
-      id: clipId,
-      clipPathUnits: "userSpaceOnUse",
-    });
-    clipPath.append(createSvgElement("path", { d: paths.shell }));
-    defs.append(clipPath);
-
-    const reflectedGradient = createSvgElement("g", {
-      "clip-path": `url(#${clipId})`,
-      opacity: gradientOpacity.toFixed(3),
-    });
-
-    for (let index = 0; index < BRANCH_GRADIENT_LAYERS; index += 1) {
-      const t = (index + 1) / BRANCH_GRADIENT_LAYERS;
-      const widthScale = lerp(0.94, 0.16, easeOutSine(t));
-      const color = rgbToCss(lerpColor(BRANCH_EDGE_RGB, BRANCH_CENTER_RGB, Math.pow(t, 0.92)));
-      const stroke = createSvgElement("path", {
-        d: centerline,
-        class: "branch-gradient-stroke",
-        stroke: color,
-        "stroke-width": (gradientWidth * widthScale).toFixed(2),
-        opacity: lerp(0.1, 0.78, Math.pow(t, 1.15)).toFixed(3),
-      });
-      reflectedGradient.append(stroke);
-    }
-
-    const barkGrain = createSvgElement("g", {
-      "clip-path": `url(#${clipId})`,
-      opacity: gradientOpacity.toFixed(3),
-    });
-
-    barkTexture.forEach((strokeData) => {
-      barkGrain.append(
-        createSvgElement("path", {
-          d: strokeData.d,
-          class: strokeData.className,
-          "stroke-width": strokeData.width.toFixed(2),
-          opacity: (strokeData.opacity * emphasisAlpha).toFixed(3),
-        }),
-      );
-    });
-
-    const grainOverlay = createSvgElement("g", {
-      "clip-path": `url(#${clipId})`,
-      opacity: (gradientOpacity * 0.85).toFixed(3),
-    });
-    grainOverlay.append(
-      createSvgElement("rect", {
-        x: 0,
-        y: 0,
-        width: WIDTH,
-        height: HEIGHT,
-        class: "branch-grain-overlay",
-        filter: `url(#${BRANCH_NOISE_FILTER_ID})`,
-      }),
-    );
-
-    const highlight = createSvgElement("path", {
-      d: centerline,
-      class: "branch-highlight",
-      "stroke-width": highlightWidth.toFixed(2),
-      opacity: highlightOpacity.toFixed(3),
-      stroke: rgbToCss(lerpColor(BRANCH_CENTER_RGB, BRANCH_HIGHLIGHT_RGB, 0.72)),
-    });
-
-    const surface = createSvgElement("g", {
-      class: "branch-surface",
-    });
-    surface.append(shell, reflectedGradient, grainOverlay, barkGrain);
-
-    branchBackdrop.append(shadow);
-    branchGroup.append(surface, highlight);
+    branchBackdrop.append(outlineGlow);
+    branchGroup.append(shell);
   }
 
   function drawBranchEnchant(
@@ -1481,7 +1361,7 @@ export function createTreeRenderer({
 
   function rootBaseGeometry(node) {
     const end = { x: node.render.x, y: node.render.y };
-    const baseLength = 66;
+    const baseLength = ROOT_BASE_LENGTH;
     const baseAngle = node.render.angle + Math.PI;
     const start = {
       x: end.x + Math.cos(baseAngle) * baseLength,
@@ -1529,8 +1409,10 @@ export function createTreeRenderer({
 
   function drawRootBase(node, emphasis = 1) {
     const geometry = rootBaseGeometry(node);
-    const startWidth = node.render.thickness * 1.95 * BRANCH_RENDER_SCALE * 0.5;
-    const endWidth = node.render.thickness * 1.02 * BRANCH_RENDER_SCALE * 0.5;
+    const startWidth =
+      node.render.thickness * ROOT_BASE_START_WIDTH_MULTIPLIER * BRANCH_RENDER_SCALE * 0.5;
+    const endWidth =
+      node.render.thickness * ROOT_BASE_END_WIDTH_MULTIPLIER * BRANCH_RENDER_SCALE * 0.5;
     drawBranchSurface({
       paths: branchSurfacePaths(geometry, startWidth, endWidth, 16),
       barkTexture: branchBarkTexture(geometry, startWidth, endWidth, 0.32, 0.61),
@@ -1569,38 +1451,51 @@ export function createTreeRenderer({
   }
 
   function drawHoverTooltip(node) {
+    const viewportScale = state.viewportScale || 1;
+    const uiScale = 1 / viewportScale;
     const topic = node.label || "Untitled topic";
     const text = createSvgElement("text", {
-      x: (node.render.x + 16).toFixed(2),
-      y: (node.render.y - 16).toFixed(2),
+      x: (node.render.x + 16 * uiScale).toFixed(2),
+      y: (node.render.y - 16 * uiScale).toFixed(2),
       class: "topic-tooltip-text",
     });
+    text.style.fontSize = `${12 * uiScale}px`;
     text.textContent = topic;
     nodeGroup.append(text);
 
     const bbox = text.getBBox();
-    const paddingX = 10;
-    const paddingY = 6;
-    const left = clamp(bbox.x - paddingX, 8, WIDTH - bbox.width - paddingX * 2 - 8);
-    const top = clamp(bbox.y - paddingY, 8, HEIGHT - bbox.height - paddingY * 2 - 8);
+    const paddingX = 10 * uiScale;
+    const paddingY = 6 * uiScale;
+    const inset = 8 * uiScale;
+    const left = clamp(
+      bbox.x - paddingX,
+      inset,
+      WIDTH - bbox.width - paddingX * 2 - inset,
+    );
+    const top = clamp(
+      bbox.y - paddingY,
+      inset,
+      HEIGHT - bbox.height - paddingY * 2 - inset,
+    );
     text.setAttribute("x", (left + paddingX).toFixed(2));
-    text.setAttribute("y", (top + paddingY + bbox.height - 4).toFixed(2));
+    text.setAttribute("y", (top + paddingY + bbox.height - 4 * uiScale).toFixed(2));
 
     const plate = createSvgElement("rect", {
       x: left.toFixed(2),
       y: top.toFixed(2),
       width: (bbox.width + paddingX * 2).toFixed(2),
       height: (bbox.height + paddingY * 2).toFixed(2),
-      rx: 12,
+      rx: (12 * uiScale).toFixed(2),
       class: "topic-tooltip-plate",
+      "stroke-width": uiScale.toFixed(3),
     });
 
     nodeGroup.insertBefore(plate, text);
   }
 
   function drawScene(now) {
-    defs.replaceChildren();
-    defs.append(createBranchNoiseFilter());
+    const viewportScale = state.viewportScale || 1;
+    const uiScale = 1 / viewportScale;
     branchBackdrop.replaceChildren();
     branchGroup.replaceChildren();
     tipGroup.replaceChildren();
@@ -1614,7 +1509,7 @@ export function createTreeRenderer({
       const rootBranchHit = createSvgElement("path", {
         d: rootBaseGeometry(root).centerline,
         class: "branch-hit",
-        "stroke-width": Math.max(26, root.render.thickness * 1.7).toFixed(2),
+        "stroke-width": (Math.max(26, root.render.thickness * 1.7) * uiScale).toFixed(2),
       });
       attachBranchInteractions(rootBranchHit, root.id);
       branchGroup.append(rootBranchHit);
@@ -1657,7 +1552,7 @@ export function createTreeRenderer({
       const branchHit = createSvgElement("path", {
         d: geometry.centerline,
         class: "branch-hit",
-        "stroke-width": Math.max(22, (startWidth + endWidth) * 2.2).toFixed(2),
+        "stroke-width": (Math.max(22, (startWidth + endWidth) * 2.2) * uiScale).toFixed(2),
       });
       attachBranchInteractions(branchHit, node.id);
       branchGroup.append(branchHit);
@@ -1669,7 +1564,7 @@ export function createTreeRenderer({
         const rootHit = createSvgElement("circle", {
           cx: node.render.x.toFixed(2),
           cy: node.render.y.toFixed(2),
-          r: Math.max(24, node.render.thickness * 1.02).toFixed(2),
+          r: (Math.max(24, node.render.thickness * 1.02) * uiScale).toFixed(2),
           class: "topic-hit",
           tabindex: 0,
           role: "button",
@@ -1683,21 +1578,21 @@ export function createTreeRenderer({
       const glow = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
-        r: Math.max(2.2, node.render.thickness * 0.42).toFixed(2),
+        r: (Math.max(2.2, node.render.thickness * 0.42) * uiScale).toFixed(2),
         class: "node-glow",
         opacity: (0.46 * emphasis).toFixed(3),
       });
       const core = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
-        r: Math.max(1.7, node.render.thickness * 0.18).toFixed(2),
+        r: (Math.max(1.7, node.render.thickness * 0.18) * uiScale).toFixed(2),
         class: "node-core",
         opacity: emphasis.toFixed(3),
       });
       const hit = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
-        r: Math.max(16, node.render.thickness * 1.18).toFixed(2),
+        r: (Math.max(16, node.render.thickness * 1.18) * uiScale).toFixed(2),
         class: "topic-hit",
         tabindex: 0,
         role: "button",
@@ -1706,17 +1601,6 @@ export function createTreeRenderer({
       attachNodeInteractions(hit, node);
 
       nodeGroup.append(glow, core, hit);
-
-      if (!node.children.length) {
-        const bud = createSvgElement("circle", {
-          cx: (node.render.x + Math.cos(node.render.angle) * 6).toFixed(2),
-          cy: (node.render.y + Math.sin(node.render.angle) * 6).toFixed(2),
-          r: 4.7,
-          class: "blossom-bud",
-          opacity: (0.88 * emphasis).toFixed(3),
-        });
-        nodeGroup.append(bud);
-      }
     }
 
     const globallyDisabled = Boolean(state.animation);
@@ -1734,7 +1618,7 @@ export function createTreeRenderer({
 
       const tipButton = createSvgElement("g", {
         class: classes.join(" "),
-        transform: `translate(${anchor.x.toFixed(2)} ${anchor.y.toFixed(2)})`,
+        transform: `translate(${anchor.x.toFixed(2)} ${anchor.y.toFixed(2)}) scale(${uiScale.toFixed(3)})`,
         tabindex: globallyDisabled || node.ui.loading ? -1 : 0,
         role: "button",
         "aria-label": `Expand ${node.label}`,
@@ -1900,6 +1784,7 @@ export function createTreeRenderer({
     setExpandHandler,
     setHoverHandler,
     setNodeSelectHandler,
+    setViewportScale,
     setNodeError,
     setNodeLoading,
     setTree,

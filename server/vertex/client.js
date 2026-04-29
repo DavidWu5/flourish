@@ -13,21 +13,23 @@ if (credentialsJson && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
 const hasVertexConfig = Boolean(
   process.env.GOOGLE_CLOUD_PROJECT && process.env.GOOGLE_CLOUD_LOCATION,
 );
-const hasApiKey = Boolean(process.env.GEMINI_API_KEY);
-const REQUEST_TIMEOUT_MS = Number(process.env.FLORISH_VERTEX_TIMEOUT_MS) || 3500;
+const hasApiKey = Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
+const REQUEST_TIMEOUT_MS =
+  Number(process.env.FLORISH_VERTEX_TIMEOUT_MS || process.env.FLORISH_GEMINI_TIMEOUT_MS) ||
+  3500;
 
 export const ai =
-  hasApiKey || hasVertexConfig
-    ? new GoogleGenAI(
-        hasApiKey
-          ? { apiKey: process.env.GEMINI_API_KEY }
-          : {
-              vertexai: true,
-              project: process.env.GOOGLE_CLOUD_PROJECT,
-              location: process.env.GOOGLE_CLOUD_LOCATION,
-            },
-      )
-    : null;
+  hasVertexConfig
+    ? new GoogleGenAI({
+        vertexai: true,
+        project: process.env.GOOGLE_CLOUD_PROJECT,
+        location: process.env.GOOGLE_CLOUD_LOCATION,
+      })
+    : hasApiKey
+      ? new GoogleGenAI({
+          apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+        })
+      : null;
 
 function stripCodeFences(text) {
   return String(text || '')
