@@ -92,8 +92,9 @@ body::before {
 
 .canvas-frame {
   position: relative;
-  width: min(100%, 1360px);
-  margin: 0 auto;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
   aspect-ratio: 1000 / 720;
   overflow: clip;
   cursor: grab;
