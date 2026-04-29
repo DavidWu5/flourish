@@ -10,6 +10,9 @@ const GROW_STAGGER_BASE = 82;
 const GROW_STAGGER_VARIANCE = 64;
 const MIDDLE_BRANCH_START_ADVANCE = 110;
 const MIDDLE_BRANCH_DURATION_MULTIPLIER = 0.76;
+const BRANCH_ENCHANT_TRAVEL_PORTION = 0.78;
+const BRANCH_ENCHANT_TRAIL_BASE = 0.16;
+const BRANCH_ENCHANT_TRAIL_MAX = 0.42;
 const EMPHASIS_FADE_DURATION = 180;
 const BRANCH_RENDER_SCALE = 0.9;
 const BRANCH_GRADIENT_LAYERS = 12;
@@ -22,6 +25,9 @@ const BRANCH_TURBULENCE_STRENGTH = 0.5;
 const BRANCH_EDGE_RGB = { r: 96, g: 58, b: 38 };
 const BRANCH_CENTER_RGB = { r: 171, g: 124, b: 90 };
 const BRANCH_HIGHLIGHT_RGB = { r: 225, g: 192, b: 150 };
+const ENCHANT_GLOW_RGB = { r: 232, g: 240, b: 240 };
+const ENCHANT_CORE_RGB = { r: 242, g: 189, b: 208 };
+const ENCHANT_SPARK_RGB = { r: 125, g: 202, b: 216 };
 
 export function createTreeRenderer({
   svg,
@@ -824,6 +830,58 @@ export function createTreeRenderer({
     state.rafId = requestAnimationFrame(tick);
   }
 
+  function getGrowthState(animation, nodeId, now) {
+    const timing = animation.childTimings?.get(nodeId);
+    const localDuration = Math.max(1, timing?.duration ?? GROW_DURATION);
+    const localGrowT = clamp((now - (timing?.start ?? animation.start)) / localDuration, 0, 1);
+    const settleMix = easeOutBack(clamp(localGrowT * 1.03, 0, 1), 0.68);
+    const tipGrowthMix = easeOutCubic(clamp(localGrowT * 1.02, 0, 1));
+    const thicknessMix = easeOutCubic(clamp((localGrowT - 0.14) / 0.86, 0, 1));
+    const growthBendScale = 1 + Math.sin(tipGrowthMix * Math.PI) * 0.14;
+
+    const dissolveStart = BRANCH_ENCHANT_TRAVEL_PORTION;
+    const enchantHead = localGrowT > 0 ? 1 : 0;
+    const dissipate = clamp(
+      (tipGrowthMix - dissolveStart) / (1 - dissolveStart),
+      0,
+      1,
+    );
+    const trailLength = lerp(
+      BRANCH_ENCHANT_TRAIL_BASE,
+      BRANCH_ENCHANT_TRAIL_MAX,
+      dissipate,
+    );
+    const revealTail = clamp(tipGrowthMix - trailLength, 0, 1);
+    const dissolveTail = lerp(0, 1, dissipate);
+    const enchantTail =
+      tipGrowthMix < dissolveStart
+        ? revealTail
+        : Math.max(revealTail, dissolveTail);
+    const enchantOpacity =
+      localGrowT <= 0
+        ? 0
+        : clamp(
+            (1 - dissipate) *
+              lerp(0.55, 1, Math.sin(Math.min(localGrowT, 1) * Math.PI)),
+            0,
+            1,
+          );
+
+    return {
+      localGrowT,
+      settleMix,
+      tipGrowthMix,
+      thicknessMix,
+      growthBendScale,
+      enchant: {
+        head: enchantHead,
+        tail: enchantTail,
+        opacity: enchantOpacity,
+        dissipate,
+      },
+    };
+  }
+
   function updateAnimation(now) {
     const animation = state.animation;
 
@@ -871,13 +929,8 @@ export function createTreeRenderer({
     for (const nodeId of animation.newChildIds) {
       const node = state.nodes.get(nodeId);
       if (!node) continue;
-      const timing = animation.childTimings?.get(nodeId);
-      const localDuration = Math.max(1, timing?.duration ?? GROW_DURATION);
-      const localGrowT = clamp((now - (timing?.start ?? animation.start)) / localDuration, 0, 1);
-      const settleMix = easeOutBack(clamp(localGrowT * 1.03, 0, 1), 0.68);
-      const tipGrowthMix = easeOutCubic(clamp(localGrowT * 1.02, 0, 1));
-      const thicknessMix = easeOutCubic(clamp((localGrowT - 0.14) / 0.86, 0, 1));
-      const growthBendScale = 1 + Math.sin(tipGrowthMix * Math.PI) * 0.14;
+      const growthState = getGrowthState(animation, nodeId, now);
+      const { settleMix, tipGrowthMix, thicknessMix, growthBendScale } = growthState;
 
       const parent = node.parentId ? state.nodes.get(node.parentId) : null;
       const settledPose = {
@@ -1098,6 +1151,25 @@ export function createTreeRenderer({
       geometry.end,
       (t - 0.5) * 2,
     );
+  }
+
+  function centerlineSegmentPath(geometry, startT, endT, samples = 18) {
+    const from = clamp(startT, 0, 1);
+    const to = clamp(endT, 0, 1);
+    if (to - from <= 0.0005) return "";
+
+    const points = [];
+    for (let index = 0; index <= samples; index += 1) {
+      const mix = index / samples;
+      const t = lerp(from, to, mix);
+      points.push(branchPointAt(geometry, t));
+    }
+
+    return points
+      .map((point, index) =>
+        `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`,
+      )
+      .join(" ");
   }
 
   function outlinePathFromGeometry(geometry, startWidth, endWidth, samples, options = {}) {
@@ -1365,6 +1437,37 @@ export function createTreeRenderer({
     branchGroup.append(surface, highlight);
   }
 
+  function drawBranchEnchant(
+    geometry,
+    startWidth,
+    endWidth,
+    progress,
+    emphasis = 1,
+  ) {
+    if (!progress || progress.opacity <= 0.001 || progress.head <= progress.tail) return;
+
+    const enchantPath = centerlineSegmentPath(geometry, progress.tail, progress.head, 16);
+    if (!enchantPath) return;
+
+    const trailWidth = lerp(startWidth, endWidth, Math.pow(progress.head, 0.72));
+    const glow = createSvgElement("path", {
+      d: enchantPath,
+      class: "branch-enchant-glow",
+      "stroke-width": Math.max(3.8, trailWidth * 2.9).toFixed(2),
+      opacity: (progress.opacity * 0.3 * emphasis).toFixed(3),
+      stroke: rgbToCss(ENCHANT_GLOW_RGB),
+    });
+    const core = createSvgElement("path", {
+      d: enchantPath,
+      class: "branch-enchant-core",
+      "stroke-width": Math.max(1.6, trailWidth * 1.1).toFixed(2),
+      opacity: (progress.opacity * 0.92 * emphasis).toFixed(3),
+      stroke: rgbToCss(lerpColor(ENCHANT_CORE_RGB, ENCHANT_SPARK_RGB, progress.dissipate)),
+    });
+
+    branchGroup.append(glow, core);
+  }
+
   function rootBaseGeometry(node) {
     const end = { x: node.render.x, y: node.render.y };
     const baseLength = 66;
@@ -1514,6 +1617,20 @@ export function createTreeRenderer({
         visibility: node.render.visibility,
         emphasis: node.render.emphasis ?? 1,
       });
+
+      const growthState =
+        state.animation && state.animation.newChildIds.has(node.id)
+          ? getGrowthState(state.animation, node.id, now)
+          : null;
+      if (growthState?.enchant) {
+        drawBranchEnchant(
+          geometry,
+          startWidth,
+          endWidth,
+          growthState.enchant,
+          node.render.emphasis ?? 1,
+        );
+      }
 
       const branchHit = createSvgElement("path", {
         d: geometry.centerline,

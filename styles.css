@@ -369,6 +369,23 @@ body::before {
   pointer-events: none;
 }
 
+.branch-enchant-glow,
+.branch-enchant-core {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.branch-enchant-glow {
+  filter: blur(4px);
+  mix-blend-mode: screen;
+}
+
+.branch-enchant-core {
+  filter: drop-shadow(0 0 5px rgba(242, 189, 208, 0.42));
+}
+
 .branch-hit {
   fill: none;
   stroke: transparent;
