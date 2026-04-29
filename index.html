@@ -86,6 +86,116 @@
           </section>
         </div>
       </section>
+
+      <aside class="mascot-dock" id="mascotDock" aria-live="polite">
+        <div class="mascot-bubble" id="mascotBubble">
+          <p class="mascot-bubble-label" id="mascotStateLabel">Guide dock</p>
+          <p class="mascot-bubble-copy" id="mascotSpeech">
+            The diagnostic guide lives here. Next step: wire questions into each branch.
+          </p>
+        </div>
+
+        <div class="mascot-stage" id="mascotStage" aria-hidden="true" data-state="idle">
+          <span class="mascot-halo"></span>
+          <span class="mascot-petal mascot-petal-top"></span>
+          <span class="mascot-petal mascot-petal-left"></span>
+          <span class="mascot-petal mascot-petal-right"></span>
+          <span class="mascot-core"></span>
+          <span class="mascot-eye mascot-eye-left"></span>
+          <span class="mascot-eye mascot-eye-right"></span>
+          <span class="mascot-smile"></span>
+        </div>
+
+        <div class="mascot-caption">
+          <p class="mascot-name">Flourish Guide</p>
+          <p class="mascot-status" id="mascotStatus">Idle state scaffold</p>
+        </div>
+      </aside>
+
+      <section class="question-panel" id="questionPanel" hidden aria-labelledby="questionTitle">
+        <div class="question-panel-card">
+          <div class="question-panel-header">
+            <div>
+              <p class="question-panel-eyebrow">Diagnostic check</p>
+              <h2 class="question-panel-title" id="questionTitle">Question prompt</h2>
+            </div>
+            <button class="question-panel-close" id="questionClose" type="button">
+              Close
+            </button>
+          </div>
+
+          <p class="question-panel-path" id="questionNodePath">Root / Topic / Branch</p>
+          <p class="question-panel-prompt" id="questionPrompt">
+            This panel is ready for the node-specific diagnostic question.
+          </p>
+
+          <form class="question-panel-form" id="questionForm">
+            <label class="question-panel-label" for="questionAnswer">Your answer</label>
+            <textarea
+              class="question-panel-input"
+              id="questionAnswer"
+              name="answer"
+              rows="5"
+              placeholder="Explain your reasoning here."
+            ></textarea>
+
+            <div class="question-panel-actions">
+              <button class="question-panel-submit" id="questionSubmit" type="submit">
+                Check understanding
+              </button>
+              <button class="question-panel-reset" id="questionReset" type="button">
+                Clear
+              </button>
+            </div>
+          </form>
+
+          <p class="question-panel-status" id="questionStatus" hidden></p>
+        </div>
+      </section>
+
+      <div class="topic-modal" id="topicModal" hidden>
+        <section
+          class="topic-modal-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="topicModalTitle"
+        >
+          <div class="topic-modal-copy">
+            <p class="topic-modal-eyebrow">Start a new learning tree</p>
+            <h2 class="topic-modal-title" id="topicModalTitle">What do you want to grow?</h2>
+            <p class="topic-modal-body">
+              Enter a topic, let the first branches bloom, and then test understanding one node
+              at a time.
+            </p>
+          </div>
+
+          <form class="topic-modal-form" id="topicForm">
+            <label class="topic-modal-label" for="topicInput">Topic</label>
+            <div class="topic-modal-controls">
+              <input
+                class="topic-modal-input"
+                id="topicInput"
+                name="topic"
+                type="text"
+                placeholder="Linear Algebra, Photosynthesis, Jazz Theory..."
+                autocomplete="off"
+              />
+              <button class="topic-modal-submit" id="topicSubmit" type="submit">
+                Grow the tree
+              </button>
+            </div>
+          </form>
+
+          <p class="topic-modal-status" id="topicStatus" hidden></p>
+
+          <div class="topic-modal-suggestions" aria-label="Suggested topics">
+            <button class="topic-chip" type="button">Linear Algebra</button>
+            <button class="topic-chip" type="button">Photosynthesis</button>
+            <button class="topic-chip" type="button">Neural Networks</button>
+            <button class="topic-chip" type="button">Jazz Harmony</button>
+          </div>
+        </section>
+      </div>
     </main>
 
     <script type="module" src="./app.js"></script>

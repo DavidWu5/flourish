@@ -153,7 +153,10 @@ export class ApiTreeProvider extends TreeProvider {
     super();
     this.seedUrl = seedUrl;
     this.expandUrl = expandUrl;
-    this.fetchImpl = fetchImpl;
+    this.fetchImpl =
+      fetchImpl === globalThis.fetch && typeof fetchImpl === "function"
+        ? fetchImpl.bind(globalThis)
+        : fetchImpl;
   }
 
   async postJson(url, payload) {

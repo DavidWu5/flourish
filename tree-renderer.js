@@ -1545,6 +1545,22 @@ export function createTreeRenderer({
   function attachNodeInteractions(target, node) {
     target.addEventListener("mouseenter", () => setHoverState(node.id, node.id));
     target.addEventListener("mouseleave", () => clearHoverState(node.id, node.id));
+    target.addEventListener("click", (event) => {
+      event.preventDefault();
+      setSelectedNode(node.id);
+    });
+    target.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      setSelectedNode(node.id);
+    });
+  }
+
+  function nodeActionLabel(node) {
+    if (!node) return "Select topic";
+    return node.metadata?.question
+      ? `Check understanding for ${node.label}`
+      : `Select ${node.label}`;
   }
 
   function attachBranchInteractions(target, nodeId) {
@@ -1657,7 +1673,7 @@ export function createTreeRenderer({
           class: "topic-hit",
           tabindex: 0,
           role: "button",
-          "aria-label": `Open details for ${node.label}`,
+          "aria-label": nodeActionLabel(node),
         });
         attachNodeInteractions(rootHit, node);
         nodeGroup.append(rootHit);
@@ -1685,7 +1701,7 @@ export function createTreeRenderer({
         class: "topic-hit",
         tabindex: 0,
         role: "button",
-        "aria-label": `Open details for ${node.label}`,
+        "aria-label": nodeActionLabel(node),
       });
       attachNodeInteractions(hit, node);
 

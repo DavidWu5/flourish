@@ -1,6 +1,9 @@
 import { TreeController } from "./tree-controller.js";
 import { ApiTreeProvider, MockTreeProvider } from "./tree-provider.js";
 import { createTreeRenderer } from "./tree-renderer.js";
+import { Mascot } from "./mascot.js";
+import { setupQuestionFlow } from "./question-flow.js";
+import { setupTopicEntry } from "./topic-entry.js";
 
 const BUILD_VERSION = "Latest build marker: TREE_NODE_DETAIL_V1 (2026-04-29)";
 const VIEWBOX_WIDTH = 1000;
@@ -302,13 +305,23 @@ renderer.setHoverHandler((node) => {
 });
 
 const controller = new TreeController({
-  provider: new MockTreeProvider(),
+  provider: new ApiTreeProvider(),
   renderer,
   initialTopic: "Learning Tree",
 });
 
-controller.init().catch((error) => {
-  console.error("Failed to initialize learning tree", error);
+const mascot = new Mascot();
+
+const topicEntry = setupTopicEntry({
+  controller,
+  mascot,
+  resetViewport: resetViewportPosition,
+});
+
+const questionFlow = setupQuestionFlow({
+  controller,
+  renderer,
+  mascot,
 });
 
 // Small debug facade so the backend teammate can drive the tree without
@@ -333,6 +346,11 @@ window.treeApp = {
   resetViewport() {
     resetViewportPosition();
   },
+  showTopicModal() {
+    topicEntry.open();
+  },
+  mascot,
+  questionFlow,
   useMockProvider() {
     controller.setProvider(new MockTreeProvider());
   },
