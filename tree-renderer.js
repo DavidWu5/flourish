@@ -134,7 +134,7 @@ export function createTreeRenderer({
   }
 
   function canExpand(node) {
-    return Boolean(node.expandable) && !node.ui.loading;
+    return Boolean(node.expandable) && !node.ui.loading && node.children.length === 0;
   }
 
   function createSvgElement(name, attrs = {}) {
@@ -210,6 +210,11 @@ export function createTreeRenderer({
 
     const freshNodes = [];
     const now = performance.now();
+    const existingLabels = new Set(
+      parent.children
+        .map((childId) => state.nodes.get(childId)?.label?.trim().toLowerCase())
+        .filter(Boolean),
+    );
 
     for (const node of state.nodes.values()) {
       node.from = {
@@ -221,10 +226,12 @@ export function createTreeRenderer({
     }
 
     for (const data of childNodes) {
-      if (state.nodes.has(data.id)) continue;
+      const labelKey = data.label?.trim().toLowerCase();
+      if (state.nodes.has(data.id) || (labelKey && existingLabels.has(labelKey))) continue;
       const child = createVisualNode({ ...data, parentId });
       state.nodes.set(child.id, child);
       parent.children.push(child.id);
+      if (labelKey) existingLabels.add(labelKey);
 
       child.from = {
         x: parent.render.x,
@@ -887,6 +894,7 @@ export function createTreeRenderer({
       nodeLabel: node.label,
       summary: node.summary,
       depth: node.depth,
+      expandable: node.expandable,
       path: buildPath(nodeId),
       existingChildren: node.children.map((childId) => state.nodes.get(childId)?.label).filter(Boolean),
     };

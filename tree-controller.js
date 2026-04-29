@@ -28,13 +28,17 @@ export class TreeController {
   async expand(nodeId) {
     if (this.pendingExpansions.has(nodeId)) return null;
 
+    const currentContext = this.renderer.getNodeContext(nodeId);
+    if (!currentContext?.expandable || currentContext.existingChildren.length) {
+      return null;
+    }
+
     this.pendingExpansions.add(nodeId);
     this.renderer.setNodeLoading(nodeId, true);
     this.renderer.setNodeError(nodeId, null);
 
     try {
-      const context = this.renderer.getNodeContext(nodeId);
-      const response = await this.provider.expand(nodeId, context);
+      const response = await this.provider.expand(nodeId, currentContext);
       const targetId = response.parentId || nodeId;
 
       if (response.parentPatch) {
@@ -42,9 +46,7 @@ export class TreeController {
       }
 
       const nodes = response.nodes || [];
-      if (!nodes.length) {
-        this.renderer.patchNode(targetId, { expandable: false });
-      }
+      this.renderer.patchNode(targetId, { expandable: false });
 
       this.renderer.appendChildren(targetId, nodes);
       return response;
