@@ -358,7 +358,9 @@ export function createTreeRenderer({
 
   function nextAngleFor(parent, node, index, siblingCount) {
     if (node.slot === "trunk") {
-      return -Math.PI / 2 + node.seed.lean * 0.03;
+      const offset = childSpreadOffset(index, siblingCount);
+      const spread = lerp(0.22, 0.64, clamp((siblingCount - 1) / 4, 0, 1));
+      return -Math.PI / 2 + offset * spread + node.seed.lean * 0.05;
     }
 
     const outwardBias = clamp((parent.target.x - ROOT_X) / 330, -1, 1) * 0.12;

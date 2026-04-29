@@ -2,6 +2,8 @@ import { TreeController } from "./tree-controller.js";
 import { ApiTreeProvider, MockTreeProvider } from "./tree-provider.js";
 import { createTreeRenderer } from "./tree-renderer.js";
 
+const BUILD_VERSION = "Latest build marker: BRANCH_FIX_V3 (2026-04-29)";
+
 const renderer = createTreeRenderer({
   svg: document.querySelector("#treeSvg"),
   branchBackdrop: document.querySelector("#branchBackdrop"),
@@ -9,6 +11,10 @@ const renderer = createTreeRenderer({
   tipGroup: document.querySelector("#tipGroup"),
   nodeGroup: document.querySelector("#nodeGroup"),
 });
+const buildBanner = document.querySelector("#buildBanner");
+if (buildBanner) {
+  buildBanner.textContent = BUILD_VERSION;
+}
 
 const controller = new TreeController({
   provider: new MockTreeProvider(),
