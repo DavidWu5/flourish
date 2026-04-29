@@ -106,6 +106,12 @@ export function setupTopicEntry({
       setStatus("Growing the first foundational branches...");
       await controller.expand(rootId);
 
+      // Pre-fetch all starter node expansions in the background so clicks feel instant
+      const freshSnapshot = controller.getSnapshot();
+      for (const node of (freshSnapshot?.nodes ?? [])) {
+        if (node.expandable) controller.prefetchExpand(node.id);
+      }
+
       close();
       focusTree({ behavior: "smooth" });
       return true;

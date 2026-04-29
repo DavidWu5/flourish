@@ -68,18 +68,13 @@ const buildBanner = document.querySelector("#buildBanner");
 const nodeInfoPanel = document.querySelector("#nodeInfoPanel");
 const nodeInfoTitle = document.querySelector("#nodeInfoTitle");
 const nodeInfoSummary = document.querySelector("#nodeInfoSummary");
-const nodeInfoHint = document.querySelector("#nodeInfoHint");
-const nodeInfoPath = document.querySelector("#nodeInfoPath");
-const nodeInfoDepth = document.querySelector("#nodeInfoDepth");
-const nodeInfoChildren = document.querySelector("#nodeInfoChildren");
-const nodeInfoExpandable = document.querySelector("#nodeInfoExpandable");
-const nodeInfoEmpty = document.querySelector("#nodeInfoEmpty");
-const nodeInfoMetadata = document.querySelector("#nodeInfoMetadata");
 const nodeDetailLayer = document.querySelector("#nodeDetailLayer");
 const nodeDetailTitle = document.querySelector("#nodeDetailTitle");
 const nodeDetailPath = document.querySelector("#nodeDetailPath");
 const nodeDetailBody = document.querySelector("#nodeDetailBody");
 const nodeDetailClose = document.querySelector("#nodeDetailClose");
+const nodeDetailCta = document.querySelector("#nodeDetailCta");
+const nodeDetailExplain = document.querySelector("#nodeDetailExplain");
 
 const panState = {
   x: 0,
@@ -107,13 +102,6 @@ const petalParticleState = {
 let hoveredNode = null;
 let topicLabelTimerId = 0;
 let petalParticleIdSequence = 0;
-
-function formatMetadataLabel(key) {
-  return String(key)
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -688,57 +676,13 @@ function renderNodeInfo(node) {
 
   if (!node) {
     if (nodeInfoTitle) nodeInfoTitle.textContent = "Hover a node";
-    if (nodeInfoSummary) {
-      nodeInfoSummary.textContent =
-        "Move over any topic node to inspect its details from the tree data.";
-    }
-    if (nodeInfoHint) nodeInfoHint.textContent = "Press Space to view the full description.";
-    if (nodeInfoPath) nodeInfoPath.textContent = "No node selected";
-    if (nodeInfoDepth) nodeInfoDepth.textContent = "--";
-    if (nodeInfoChildren) nodeInfoChildren.textContent = "--";
-    if (nodeInfoExpandable) nodeInfoExpandable.textContent = "--";
-    if (nodeInfoEmpty) nodeInfoEmpty.hidden = false;
-    if (nodeInfoMetadata) nodeInfoMetadata.replaceChildren();
+    if (nodeInfoSummary) nodeInfoSummary.textContent = "Move over any branch to explore the concept.";
     return;
   }
 
   if (nodeInfoTitle) nodeInfoTitle.textContent = node.label || "Untitled topic";
   if (nodeInfoSummary) {
-    nodeInfoSummary.textContent =
-      node.summary || "No summary was returned for this node yet.";
-  }
-  if (nodeInfoHint) {
-    nodeInfoHint.textContent = "Press Space to view the full description.";
-  }
-  if (nodeInfoPath) nodeInfoPath.textContent = node.path.join(" / ");
-  if (nodeInfoDepth) nodeInfoDepth.textContent = String(node.depth);
-  if (nodeInfoChildren) nodeInfoChildren.textContent = String(node.childCount);
-  if (nodeInfoExpandable) nodeInfoExpandable.textContent = node.expandable ? "Yes" : "No";
-
-  const metadataEntries = Object.entries(node.metadata || {}).filter(
-    ([, value]) => value !== null && value !== undefined && value !== "",
-  );
-
-  if (nodeInfoMetadata) {
-    nodeInfoMetadata.replaceChildren();
-    metadataEntries.forEach(([key, value]) => {
-      const row = document.createElement("div");
-      row.className = "node-info-row";
-
-      const term = document.createElement("dt");
-      term.textContent = formatMetadataLabel(key);
-
-      const description = document.createElement("dd");
-      description.textContent =
-        typeof value === "object" ? JSON.stringify(value) : String(value);
-
-      row.append(term, description);
-      nodeInfoMetadata.append(row);
-    });
-  }
-
-  if (nodeInfoEmpty) {
-    nodeInfoEmpty.hidden = metadataEntries.length > 0;
+    nodeInfoSummary.textContent = node.summary || "Hover any branch to explore the concept.";
   }
 }
 
@@ -779,6 +723,12 @@ function openNodeDetail(node) {
     nodeDetailBody.textContent =
       resolveNodeDescription(node) ||
       "No full description was returned for this node yet.";
+  }
+  if (nodeDetailCta) {
+    nodeDetailCta.hidden = !Boolean(node.metadata?.question);
+  }
+  if (nodeDetailExplain) {
+    nodeDetailExplain.hidden = !resolveNodeDescription(node);
   }
 
   nodeDetailLayer.hidden = false;
@@ -882,6 +832,21 @@ const questionFlow = setupQuestionFlow({
   controller,
   renderer,
 });
+
+if (nodeDetailCta) {
+  nodeDetailCta.addEventListener("click", () => {
+    if (hoveredNode) {
+      closeNodeDetail();
+      questionFlow.openQuestion(hoveredNode);
+    }
+  });
+}
+
+if (nodeDetailExplain) {
+  nodeDetailExplain.addEventListener("click", () => {
+    if (hoveredNode) openNodeDetail(hoveredNode);
+  });
+}
 
 // Small debug facade so the backend teammate can drive the tree without
 // touching renderer internals while local development is in progress.

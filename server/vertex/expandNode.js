@@ -308,14 +308,19 @@ async function maybeGenerateNodes({ nodeId, context, fallback }) {
 
   let researchText = '';
   if (Number(context.depth || 0) === 0) {
+    console.log(`[expand] Researching "${context.rootTopic}" with gemini-2.5-flash + Google Search...`);
+    const t = Date.now();
     researchText =
       (await generateText({
-        model: MODEL_PRO,
+        model: MODEL_FLASH,
         prompt: `Research the three most important beginner concepts someone should understand before learning "${context.rootTopic}". Keep it concise and pedagogical.`,
         config: groundedConfig,
       })) || '';
+    console.log(`[expand] Research complete (${Date.now() - t}ms). researchText length: ${researchText.length}`);
   }
 
+  console.log(`[expand] Structuring nodes for "${context.nodeLabel}" (depth ${context.depth}) with gemini-2.5-flash...`);
+  const t2 = Date.now();
   const generated = await generateStructuredJson({
     model: MODEL_FLASH,
     prompt: [
@@ -334,6 +339,10 @@ async function maybeGenerateNodes({ nodeId, context, fallback }) {
     schema: EXPANSION_SCHEMA,
     config: structuredConfig(EXPANSION_SCHEMA),
   });
+  console.log(`[expand] Structuring complete (${Date.now() - t2}ms). Got ${generated?.nodes?.length ?? 0} nodes. Source: ${generated ? 'GEMINI' : 'FALLBACK'}`);
+  if (generated?.nodes) {
+    generated.nodes.forEach(n => console.log(`  → ${n.label}`));
+  }
 
   return normalizeGeneratedNodes({ nodeId, context, payload: generated });
 }

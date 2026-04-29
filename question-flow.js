@@ -31,7 +31,6 @@ export function setupQuestionFlow({
 } = {}) {
   const panel = document.querySelector("#questionPanel");
   const title = document.querySelector("#questionTitle");
-  const path = document.querySelector("#questionNodePath");
   const prompt = document.querySelector("#questionPrompt");
   const form = document.querySelector("#questionForm");
   const answerInput = document.querySelector("#questionAnswer");
@@ -43,7 +42,6 @@ export function setupQuestionFlow({
   if (
     !panel ||
     !title ||
-    !path ||
     !prompt ||
     !form ||
     !answerInput ||
@@ -89,7 +87,7 @@ export function setupQuestionFlow({
     submitButton.disabled = nextSubmitting;
     closeButton.disabled = nextSubmitting;
     resetButton.disabled = nextSubmitting;
-    submitButton.textContent = nextSubmitting ? "Checking..." : "Check understanding";
+    submitButton.textContent = nextSubmitting ? "Thinking..." : "That's my thinking";
   }
 
   function focusAnswer() {
@@ -114,8 +112,7 @@ export function setupQuestionFlow({
   function showPanel(node) {
     activeNode = node;
     panel.hidden = false;
-    title.textContent = node.label || "Question";
-    path.textContent = Array.isArray(node.path) ? node.path.join(" / ") : node.label || "";
+    title.textContent = node.label ? `What do you understand about "${node.label}"?` : "Think it through...";
     prompt.textContent =
       getPanelQuestion(node) ||
       "This branch does not have a diagnostic question yet.";
@@ -172,7 +169,11 @@ export function setupQuestionFlow({
   function appendPrerequisiteNode(parentNodeId, nodeData) {
     ignoreSelectionUpdates = true;
     try {
-      renderer.appendChildren(parentNodeId, [nodeData]);
+      if (typeof renderer.insertParent === "function") {
+        renderer.insertParent(parentNodeId, nodeData);
+      } else {
+        renderer.appendChildren(parentNodeId, [nodeData]);
+      }
     } finally {
       ignoreSelectionUpdates = false;
     }
@@ -206,8 +207,17 @@ export function setupQuestionFlow({
       return;
     }
 
+    if (answerInput.value.trim().toLowerCase() === "pass") {
+      hidePanel();
+      const freshRecord = getNodeRecord(node.id);
+      if (freshRecord?.expandable && controller) {
+        void controller.expand(node.id);
+      }
+      return;
+    }
+
     setSubmitting(true);
-    setPanelStatus("Checking understanding...", "info");
+    setPanelStatus("", "info");
 
     try {
       const api = typeof getApi === "function" ? getApi() : createDefaultApi();
@@ -259,6 +269,11 @@ export function setupQuestionFlow({
         }));
         unlockParentIfPrerequisiteComplete(node.id);
         hidePanel();
+        // Now that the question is answered, expand the node if it can grow
+        const freshRecord = getNodeRecord(node.id);
+        if (freshRecord?.expandable && controller) {
+          void controller.expand(node.id);
+        }
         return;
       }
 
@@ -308,6 +323,23 @@ export function setupQuestionFlow({
     }
     openQuestion(node);
   });
+
+  // Gate expansion: if a node has an unanswered question, show it instead of expanding
+  if (controller && typeof controller.setExpandGate === "function") {
+    controller.setExpandGate((nodeId) => {
+      const snapshot = controller.getSnapshot();
+      const allNodes = [snapshot?.root, ...(snapshot?.nodes ?? [])].filter(Boolean);
+      const node = allNodes.find((n) => n.id === nodeId);
+      const hasQuestion = Boolean(node?.metadata?.question);
+      const isAnswered = node?.metadata?.status === "complete";
+
+      if (hasQuestion && !isAnswered) {
+        openQuestion(node);
+        return false;
+      }
+      return true;
+    });
+  }
 
   return {
     close: handleClose,

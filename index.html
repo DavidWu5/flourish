@@ -77,39 +77,10 @@
         <div class="canvas-hint" id="canvasHint">Drag to move. Scroll or use + / - to zoom.</div>
 
         <aside class="node-info-panel" id="nodeInfoPanel" aria-live="polite" hidden>
-          <p class="node-info-eyebrow">Node details</p>
           <h2 class="node-info-title" id="nodeInfoTitle">Hover a node</h2>
           <p class="node-info-summary" id="nodeInfoSummary">
-            Move over any topic node to inspect its details from the tree data.
+            Move over any branch to explore the concept.
           </p>
-          <p class="node-info-hint" id="nodeInfoHint">Press Space to view the full description.</p>
-
-          <dl class="node-info-meta">
-            <div class="node-info-row">
-              <dt>Path</dt>
-              <dd id="nodeInfoPath">No node selected</dd>
-            </div>
-            <div class="node-info-row">
-              <dt>Depth</dt>
-              <dd id="nodeInfoDepth">--</dd>
-            </div>
-            <div class="node-info-row">
-              <dt>Children</dt>
-              <dd id="nodeInfoChildren">--</dd>
-            </div>
-            <div class="node-info-row">
-              <dt>Expandable</dt>
-              <dd id="nodeInfoExpandable">--</dd>
-            </div>
-          </dl>
-
-          <section class="node-info-extra">
-            <h3>Metadata</h3>
-            <div class="node-info-empty" id="nodeInfoEmpty">
-              API metadata for the hovered node will appear here.
-            </div>
-            <dl class="node-info-meta node-info-meta-list" id="nodeInfoMetadata"></dl>
-          </section>
         </aside>
 
         <div class="node-detail-layer" id="nodeDetailLayer" hidden>
@@ -130,6 +101,14 @@
               </button>
             </div>
             <div class="node-detail-body" id="nodeDetailBody"></div>
+            <div class="node-detail-actions">
+              <button class="node-detail-cta" id="nodeDetailCta" type="button" hidden>
+                Test your understanding
+              </button>
+              <button class="node-detail-explain" id="nodeDetailExplain" type="button" hidden>
+                Explain more
+              </button>
+            </div>
           </section>
         </div>
 
@@ -161,33 +140,24 @@
       <section class="question-panel" id="questionPanel" hidden aria-labelledby="questionTitle">
         <div class="question-panel-card">
           <div class="question-panel-header">
-            <div>
-              <p class="question-panel-eyebrow">Diagnostic check</p>
-              <h2 class="question-panel-title" id="questionTitle">Question prompt</h2>
-            </div>
-            <button class="question-panel-close" id="questionClose" type="button">
-              Close
-            </button>
+            <h2 class="question-panel-title" id="questionTitle"></h2>
+            <button class="question-panel-close" id="questionClose" type="button" aria-label="Close">✕</button>
           </div>
 
-          <p class="question-panel-path" id="questionNodePath">Root / Topic / Branch</p>
-          <p class="question-panel-prompt" id="questionPrompt">
-            This panel is ready for the node-specific diagnostic question.
-          </p>
+          <p class="question-panel-prompt" id="questionPrompt"></p>
 
           <form class="question-panel-form" id="questionForm">
-            <label class="question-panel-label" for="questionAnswer">Your answer</label>
             <textarea
               class="question-panel-input"
               id="questionAnswer"
               name="answer"
-              rows="5"
-              placeholder="Explain your reasoning here."
+              rows="4"
+              placeholder="Share your thinking..."
             ></textarea>
 
             <div class="question-panel-actions">
               <button class="question-panel-submit" id="questionSubmit" type="submit">
-                Check understanding
+                That's my thinking
               </button>
               <button class="question-panel-reset" id="questionReset" type="button">
                 Clear

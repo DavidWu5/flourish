@@ -554,6 +554,52 @@ export function createTreeRenderer({
     runAnimationLoop();
   }
 
+  function insertParent(targetNodeId, newNodeData) {
+    const target = state.nodes.get(targetNodeId);
+    if (!target || !target.parentId) return;
+    const oldParentId = target.parentId;
+    const oldParent = state.nodes.get(oldParentId);
+    if (!oldParent) return;
+
+    for (const node of state.nodes.values()) {
+      node.from = {
+        x: node.render.x,
+        y: node.render.y,
+        angle: node.render.angle,
+        thickness: node.render.thickness,
+      };
+    }
+
+    const newNode = createVisualNode({ ...newNodeData, parentId: oldParentId });
+    state.nodes.set(newNode.id, newNode);
+
+    oldParent.children = oldParent.children.filter((id) => id !== targetNodeId);
+    oldParent.children.push(newNode.id);
+    newNode.children.push(targetNodeId);
+    target.parentId = newNode.id;
+
+    newNode.from = {
+      x: oldParent.render.x,
+      y: oldParent.render.y,
+      angle: oldParent.render.angle,
+      thickness: Math.max(1.4, oldParent.render.thickness * 0.74),
+    };
+    newNode.render = { ...newNode.from, visibility: 0.0001, emphasis: 1 };
+
+    hydrateHierarchy(state.rootId);
+    layoutTree();
+
+    const now = performance.now();
+    state.animation = {
+      newChildIds: new Set([newNode.id]),
+      childTimings: new Map([[newNode.id, { start: now, end: now + GROW_DURATION, duration: GROW_DURATION }]]),
+      sourceId: oldParentId,
+      start: now,
+      end: now + GROW_DURATION,
+    };
+    runAnimationLoop();
+  }
+
   function setExpandHandler(handler) {
     state.onExpandRequest = handler;
   }
@@ -1778,6 +1824,7 @@ export function createTreeRenderer({
 
   return {
     appendChildren,
+    insertParent,
     getNodeContext,
     getSnapshot,
     patchNode,
