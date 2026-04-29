@@ -1,9 +1,9 @@
 :root {
   --page-ink: #2e1b14;
-  --branch-fill: #8b5b43;
-  --branch-shadow: rgba(31, 16, 10, 0.15);
-  --branch-edge: rgba(62, 35, 24, 0.36);
-  --branch-highlight: rgba(249, 231, 205, 0.24);
+  --branch-fill: #9c6d52;
+  --branch-shadow: rgba(63, 35, 24, 0.92);
+  --branch-edge: rgba(79, 46, 32, 0.18);
+  --branch-highlight: rgba(255, 239, 214, 0.3);
   --node-core: #5d3726;
   --node-glow: rgba(228, 181, 134, 0.34);
   --bud-fill: rgba(214, 168, 124, 0.85);
@@ -73,7 +73,7 @@ body {
 .branch-core {
   fill: var(--branch-fill);
   stroke: var(--branch-edge);
-  stroke-width: 0.6;
+  stroke-width: 0.4;
   paint-order: stroke fill;
 }
 
@@ -108,6 +108,7 @@ body {
   stroke: var(--tooltip-stroke);
   stroke-width: 1;
   filter: drop-shadow(0 6px 14px var(--tooltip-shadow));
+  pointer-events: none;
 }
 
 .topic-tooltip-text {

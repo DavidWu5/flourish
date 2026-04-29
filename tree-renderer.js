@@ -31,6 +31,10 @@ export function createTreeRenderer({
     }
   });
 
+  svg.addEventListener("mouseleave", () => {
+    clearHoveredNode();
+  });
+
   function randomSeeds() {
     return {
       curve: Math.random(),
@@ -135,6 +139,25 @@ export function createTreeRenderer({
     const density = clamp((count - 1) / 4, 0, 1);
     const depthT = clamp(node.depth / 7, 0, 1);
     return lerp(0.34, 0.96, density) * lerp(1.08, 0.74, depthT);
+  }
+
+  function centerAffinityAt(x) {
+    return 1 - clamp(Math.abs(x - ROOT_X) / 340, 0, 1);
+  }
+
+  function spreadMultiplier(parent, child, siblingCount) {
+    const centerPressure = centerAffinityAt(parent.target.x);
+    const crowdPressure = clamp((siblingCount - 1) / 4, 0, 1);
+    const crownPressure = clamp((child.stats.crown - 1) / 8, 0, 1);
+    const parentPressure = clamp((parent.stats.crown - 1) / 10, 0, 1);
+    const trunkBoost = child.slot === "trunk" ? 0.16 : 0;
+
+    return (
+      1 +
+      trunkBoost +
+      centerPressure * (0.16 + crownPressure * 0.24 + parentPressure * 0.14) +
+      crowdPressure * 0.08
+    );
   }
 
   function childLayoutOffsets(node) {
@@ -402,7 +425,8 @@ export function createTreeRenderer({
     const vigor = 0.95 + Math.min(0.24, node.stats.weight * 0.06);
     const noise = 0.9 + node.seed.length * 0.18;
     const crowdScale = lerp(1.04, 0.84, clamp((siblingCount - 1) / 4, 0, 1));
-    const centerlineBoost = 0.92 + (1 - Math.abs(node.side)) * 0.12;
+    const centerCrowding = (1 - Math.abs(node.side)) * clamp((node.stats.crown - 1) / 9, 0, 1);
+    const centerlineBoost = 0.97 + Math.abs(node.side) * 0.06 - centerCrowding * 0.12;
     const crownReach = lerp(0.98, 1.2, clamp(node.stats.crown / 10, 0, 1));
     const girthReach = lerp(0.96, 1.14, clamp(node.stats.girth / 18, 0, 1));
     return 100 * depthScale * vigor * noise * crowdScale * centerlineBoost * crownReach * girthReach;
@@ -463,12 +487,14 @@ export function createTreeRenderer({
   function nextAngleFor(parent, node, offset, siblingCount) {
     if (node.slot === "trunk") {
       const spread = lerp(0.22, 0.64, clamp((siblingCount - 1) / 4, 0, 1));
-      return -Math.PI / 2 + offset * spread + node.seed.lean * 0.05;
+      const dynamicSpread =
+        spread * (1 + centerAffinityAt(ROOT_X) * 0.12 + clamp((node.stats.crown - 1) / 8, 0, 1) * 0.18);
+      return -Math.PI / 2 + offset * dynamicSpread + node.seed.lean * 0.05;
     }
 
     const outwardBias = clamp((parent.target.x - ROOT_X) / 330, -1, 1) * 0.12;
     const upBias = clamp(parent.depth / 6, 0, 1);
-    const fan = childFanSpread(node, siblingCount);
+    const fan = childFanSpread(node, siblingCount) * spreadMultiplier(parent, node, siblingCount);
     const weightTuck = clamp(node.stats.weight / 20, 0, 0.12);
     const selfBalance =
       clamp(node.stats.spread / Math.max(node.stats.weight, 1), -1, 1) * 0.07;
@@ -510,11 +536,26 @@ export function createTreeRenderer({
     const children = node.children.map((childId) => state.nodes.get(childId));
     const siblingCount = children.length;
     const offsets = childLayoutOffsets(node);
+    const rootCenterMass = !node.parentId
+      ? children.reduce(
+          (sum, child, index) => sum + child.stats.crown * (1 - Math.abs(offsets[index] || 0)),
+          0,
+        )
+      : 0;
+    const rootLateralPush = !node.parentId
+      ? lerp(0, 72, clamp((rootCenterMass - 1.4) / 8.5, 0, 1))
+      : 0;
 
     children.forEach((child, index) => {
       const angle = nextAngleFor(node, child, offsets[index], siblingCount);
       const length = branchLength(child);
       const position = pointAtAngle(node.target, angle, length);
+
+      if (!node.parentId && Math.abs(offsets[index]) > 0.04) {
+        const outward = Math.sign(offsets[index]) * rootLateralPush * Math.pow(Math.abs(offsets[index]), 0.92);
+        position.x += outward;
+        position.y -= Math.abs(outward) * 0.04;
+      }
 
       child.target = {
         x: position.x,
@@ -567,17 +608,60 @@ export function createTreeRenderer({
     }
 
     const growT = clamp((now - animation.start) / GROW_DURATION, 0, 1);
+    const settleMix = easeOutSine(clamp(growT * 1.08, 0, 1));
+    const growthMix = easeInOutCubic(growT);
 
     for (const node of state.nodes.values()) {
-      const isNewChild = animation.newChildIds.has(node.id);
-      const mix = isNewChild ? easeInOutCubic(growT) : easeOutSine(clamp(growT * 1.15, 0, 1));
+      if (animation.newChildIds.has(node.id)) continue;
+      const mix = easeOutSine(clamp(growT * 1.15, 0, 1));
 
       node.render = {
         x: lerp(node.from.x, node.target.x, mix),
         y: lerp(node.from.y, node.target.y, mix),
         angle: lerpAngle(node.from.angle, node.target.angle, mix),
         thickness: lerp(node.from.thickness, node.target.thickness, mix),
-        visibility: isNewChild ? clamp(mix * 1.08, 0, 1) : 1,
+        visibility: 1,
+      };
+    }
+
+    for (const nodeId of animation.newChildIds) {
+      const node = state.nodes.get(nodeId);
+      if (!node) continue;
+
+      const parent = node.parentId ? state.nodes.get(node.parentId) : null;
+      const settledPose = {
+        x: lerp(node.from.x, node.target.x, settleMix),
+        y: lerp(node.from.y, node.target.y, settleMix),
+        angle: lerpAngle(node.from.angle, node.target.angle, settleMix),
+        thickness: lerp(node.from.thickness, node.target.thickness, settleMix),
+      };
+
+      if (!parent) {
+        node.render = {
+          ...settledPose,
+          visibility: clamp(growthMix * 1.04, 0, 1),
+        };
+        continue;
+      }
+
+      const geometry = branchGeometryFromPoses(
+        {
+          x: parent.render.x,
+          y: parent.render.y,
+          angle: parent.render.angle,
+        },
+        settledPose,
+        node,
+      );
+      const tipPoint = branchPointAt(geometry, growthMix);
+      const tipTangent = normalize(branchTangentAt(geometry, Math.max(0.02, growthMix)));
+
+      node.render = {
+        x: tipPoint.x,
+        y: tipPoint.y,
+        angle: Math.atan2(tipTangent.y, tipTangent.x),
+        thickness: lerp(node.from.thickness, node.target.thickness, Math.pow(growthMix, 0.88)),
+        visibility: clamp(growthMix * 1.05, 0, 1),
       };
     }
 
@@ -617,16 +701,16 @@ export function createTreeRenderer({
     return { x, y };
   }
 
-  function branchGeometry(parent, child) {
-    const start = { x: parent.render.x, y: parent.render.y };
-    const end = { x: child.render.x, y: child.render.y };
+  function branchGeometryFromPoses(startPose, endPose, child) {
+    const start = { x: startPose.x, y: startPose.y };
+    const end = { x: endPose.x, y: endPose.y };
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const length = Math.hypot(dx, dy) || 1;
     const straight = { x: dx / length, y: dy / length };
     const curvePerp = perpendicular(straight);
-    const dirA = { x: Math.cos(parent.render.angle), y: Math.sin(parent.render.angle) };
-    const dirB = { x: Math.cos(child.render.angle), y: Math.sin(child.render.angle) };
+    const dirA = { x: Math.cos(startPose.angle), y: Math.sin(startPose.angle) };
+    const dirB = { x: Math.cos(endPose.angle), y: Math.sin(endPose.angle) };
 
     const bendStrength =
       length * (0.07 + child.seed.warp * 0.06) * (child.side || (child.seed.lean >= 0 ? 1 : -1));
@@ -667,6 +751,10 @@ export function createTreeRenderer({
     C ${cp1.x.toFixed(2)} ${cp1.y.toFixed(2)}, ${cp2.x.toFixed(2)} ${cp2.y.toFixed(2)}, ${mid.x.toFixed(2)} ${mid.y.toFixed(2)}
     C ${cp3.x.toFixed(2)} ${cp3.y.toFixed(2)}, ${cp4.x.toFixed(2)} ${cp4.y.toFixed(2)}, ${end.x.toFixed(2)} ${end.y.toFixed(2)}`,
     };
+  }
+
+  function branchGeometry(parent, child) {
+    return branchGeometryFromPoses(parent.render, child.render, child);
   }
 
   function branchPointAt(geometry, t) {
@@ -798,9 +886,9 @@ export function createTreeRenderer({
     const startWidth = node.render.thickness * 1.95 * 0.5;
     const endWidth = node.render.thickness * 1.02 * 0.5;
     const shadow = createSvgElement("path", {
-      d: outlinePathFromGeometry(geometry, startWidth * 1.16, endWidth * 1.14, 16),
+      d: outlinePathFromGeometry(geometry, startWidth * 1.09, endWidth * 1.08, 16),
       class: "branch-shadow",
-      opacity: 0.92,
+      opacity: 0.94,
     });
     const core = createSvgElement("path", {
       d: outlinePathFromGeometry(geometry, startWidth, endWidth, 16),
@@ -877,9 +965,9 @@ export function createTreeRenderer({
       const isDimmed = focusActive && !focusedIds.has(node.id);
       const geometry = branchGeometry(parent, node);
       const shadow = createSvgElement("path", {
-        d: branchOutlinePath(parent, node, geometry, 1.16),
+        d: branchOutlinePath(parent, node, geometry, 1.08),
         class: "branch-shadow",
-        opacity: isDimmed ? 0.08 : 0.92,
+        opacity: isDimmed ? 0.08 : 0.94,
       });
       const core = createSvgElement("path", {
         d: branchOutlinePath(parent, node, geometry),
@@ -895,9 +983,9 @@ export function createTreeRenderer({
 
       if (node.render.visibility < 1) {
         const alpha = clamp(node.render.visibility, 0, 1);
-        shadow.setAttribute("opacity", (0.25 + alpha * 0.67).toFixed(3));
+        shadow.setAttribute("opacity", (0.32 + alpha * 0.62).toFixed(3));
         core.setAttribute("opacity", alpha.toFixed(3));
-        highlight.setAttribute("opacity", (alpha * 0.18).toFixed(3));
+        highlight.setAttribute("opacity", (alpha * 0.22).toFixed(3));
       }
 
       branchBackdrop.append(shadow);
@@ -1028,7 +1116,9 @@ export function createTreeRenderer({
       const projectedOffsets = [...childLayoutOffsets(node), 0];
       projectedOffsets.sort((a, b) => a - b);
       const offset = projectedOffsets[projectedOffsets.length - 1] || childSpreadOffset(node.children.length, nextCount);
-      const fan = childFanSpread(node, nextCount);
+      const parent = state.nodes.get(node.parentId);
+      const fanBase = childFanSpread(node, nextCount);
+      const fan = parent ? fanBase * spreadMultiplier(parent, node, nextCount) : fanBase;
       const outwardBias = clamp((node.render.x - ROOT_X) / 330, -1, 1) * 0.11;
       angle =
         node.render.angle +
