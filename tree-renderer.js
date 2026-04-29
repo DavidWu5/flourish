@@ -10,6 +10,10 @@ const BRANCH_RENDER_SCALE = 0.9;
 const BRANCH_GRADIENT_LAYERS = 12;
 const DIMMED_TREE_OPACITY = 0.18;
 const BRANCH_NOISE_FILTER_ID = "branch-bark-noise";
+// Flip this to false for a perfectly still branch silhouette.
+const BRANCH_TURBULENCE_ENABLED = true;
+const BRANCH_TURBULENCE_SPEED = 0.00052;
+const BRANCH_TURBULENCE_STRENGTH = 0.5;
 const BRANCH_EDGE_RGB = { r: 96, g: 58, b: 38 };
 const BRANCH_CENTER_RGB = { r: 171, g: 124, b: 90 };
 const BRANCH_HIGHLIGHT_RGB = { r: 225, g: 192, b: 150 };
@@ -144,6 +148,43 @@ export function createTreeRenderer({
 
   function rgbToCss(color) {
     return `rgb(${color.r}, ${color.g}, ${color.b})`;
+  }
+
+  function branchMotion(node, now) {
+    if (!BRANCH_TURBULENCE_ENABLED || !node?.parentId) return null;
+
+    const time = now * BRANCH_TURBULENCE_SPEED;
+    const depthFactor = lerp(0.5, 1, clamp(node.depth / 6, 0, 1));
+    const slotFactor = node.slot === "trunk" ? 0.46 : 1;
+    const amplitude = BRANCH_TURBULENCE_STRENGTH * depthFactor * slotFactor;
+    const phaseA = node.seed.curve * Math.PI * 2 + node.depth * 0.63 + node.side * 0.9;
+    const phaseB = node.seed.warp * Math.PI * 2 + node.depth * 0.47;
+    const swayWave = Math.sin(time + phaseA);
+    const rippleWave = Math.sin(time * 1.7 + phaseB);
+    const counterWave = Math.cos(time * 0.72 + node.seed.length * Math.PI * 2);
+
+    return {
+      bendScale: 1 + swayWave * amplitude * 0.52,
+      crookOffset: rippleWave * amplitude * 0.18,
+      startAngleOffset: counterWave * amplitude * 0.1,
+      endAngleOffset: swayWave * amplitude * 0.22,
+      edgeWavePhase: phaseB + time * 1.3,
+      edgeWaveStrength: amplitude * 0.28,
+      poseShiftX: swayWave * amplitude * 8.5,
+      poseShiftY: -Math.abs(swayWave) * amplitude * 1.4 + rippleWave * amplitude * 0.75,
+      poseAngleOffset: swayWave * amplitude * 0.12,
+    };
+  }
+
+  function applyPoseMotion(basePose, motion) {
+    if (!motion) return { ...basePose };
+
+    return {
+      x: basePose.x + motion.poseShiftX,
+      y: basePose.y + motion.poseShiftY,
+      angle: basePose.angle + motion.poseAngleOffset,
+      thickness: basePose.thickness,
+    };
   }
 
   function lerpAngle(a, b, t) {
@@ -403,6 +444,11 @@ export function createTreeRenderer({
       node.render = { ...node.target, visibility: 1, emphasis: 1 };
       node.fromEmphasis = 1;
       node.targetEmphasis = 1;
+    }
+
+    if (BRANCH_TURBULENCE_ENABLED) {
+      runAnimationLoop();
+      return;
     }
 
     drawScene(performance.now());
@@ -685,7 +731,7 @@ export function createTreeRenderer({
       updateEmphasisAnimation(now);
       drawScene(now);
 
-      if (state.animation || state.emphasisAnimation) {
+      if (state.animation || state.emphasisAnimation || BRANCH_TURBULENCE_ENABLED) {
         state.rafId = requestAnimationFrame(tick);
       }
     };
@@ -698,11 +744,13 @@ export function createTreeRenderer({
 
     if (!animation) {
       for (const node of state.nodes.values()) {
+        const motion = branchMotion(node, now);
+        const pose = applyPoseMotion(node.target, motion);
         node.render = {
-          x: node.target.x,
-          y: node.target.y,
-          angle: node.target.angle,
-          thickness: node.target.thickness,
+          x: pose.x,
+          y: pose.y,
+          angle: pose.angle,
+          thickness: pose.thickness,
           visibility: 1,
           emphasis: node.render.emphasis ?? 1,
         };
@@ -719,12 +767,20 @@ export function createTreeRenderer({
     for (const node of state.nodes.values()) {
       if (animation.newChildIds.has(node.id)) continue;
       const mix = easeOutSine(clamp(growT * 1.15, 0, 1));
-
-      node.render = {
+      const motion = branchMotion(node, now);
+      const basePose = {
         x: lerp(node.from.x, node.target.x, mix),
         y: lerp(node.from.y, node.target.y, mix),
         angle: lerpAngle(node.from.angle, node.target.angle, mix),
         thickness: lerp(node.from.thickness, node.target.thickness, mix),
+      };
+      const pose = applyPoseMotion(basePose, motion);
+
+      node.render = {
+        x: pose.x,
+        y: pose.y,
+        angle: pose.angle,
+        thickness: pose.thickness,
         visibility: 1,
         emphasis: node.render.emphasis ?? 1,
       };
@@ -759,7 +815,15 @@ export function createTreeRenderer({
         },
         settledPose,
         node,
-        { bendScale: growthBendScale },
+        (() => {
+          const motion = branchMotion(node, now);
+          return {
+            bendScale: growthBendScale * (motion?.bendScale ?? 1),
+            crookOffset: motion?.crookOffset ?? 0,
+            startAngleOffset: motion?.startAngleOffset ?? 0,
+            endAngleOffset: motion?.endAngleOffset ?? 0,
+          };
+        })(),
       );
       const tipPoint = branchPointAt(geometry, tipGrowthMix);
       const tipTangent = normalize(branchTangentAt(geometry, Math.max(0.02, tipGrowthMix)));
@@ -832,9 +896,20 @@ export function createTreeRenderer({
   }
 
   function branchGeometryFromPoses(startPose, endPose, child, options = {}) {
-    const { bendScale = 1 } = options;
-    const dirA = { x: Math.cos(startPose.angle), y: Math.sin(startPose.angle) };
-    const dirB = { x: Math.cos(endPose.angle), y: Math.sin(endPose.angle) };
+    const {
+      bendScale = 1,
+      crookOffset = 0,
+      startAngleOffset = 0,
+      endAngleOffset = 0,
+    } = options;
+    const dirA = {
+      x: Math.cos(startPose.angle + startAngleOffset),
+      y: Math.sin(startPose.angle + startAngleOffset),
+    };
+    const dirB = {
+      x: Math.cos(endPose.angle + endAngleOffset),
+      y: Math.sin(endPose.angle + endAngleOffset),
+    };
     const join = { x: startPose.x, y: startPose.y };
     const end = { x: endPose.x, y: endPose.y };
     const rawDx = end.x - join.x;
@@ -860,7 +935,7 @@ export function createTreeRenderer({
       (child.side || (child.seed.lean >= 0 ? 1 : -1)) *
       bendScale;
     const bend = bendStrength;
-    const crook = (child.seed.curve - 0.5) * length * 0.08;
+    const crook = (child.seed.curve - 0.5) * length * 0.08 + crookOffset * length * 0.04;
 
     const mid = {
       x: lerp(start.x, end.x, 0.54) + curvePerp.x * bend + straight.x * crook,
@@ -936,7 +1011,12 @@ export function createTreeRenderer({
     );
   }
 
-  function outlinePathFromGeometry(geometry, startWidth, endWidth, samples) {
+  function outlinePathFromGeometry(geometry, startWidth, endWidth, samples, options = {}) {
+    const {
+      edgeWavePhase = 0,
+      edgeWaveStrength = 0,
+      edgeWaveFrequency = 3.2,
+    } = options;
     const left = [];
     const right = [];
 
@@ -946,14 +1026,21 @@ export function createTreeRenderer({
       const tangent = normalize(branchTangentAt(geometry, t));
       const normal = perpendicular(tangent);
       const width = lerp(startWidth, endWidth, Math.pow(t, 0.8));
+      const edgeEnvelope = Math.sin(Math.PI * t);
+      const edgeWave =
+        Math.sin(t * Math.PI * edgeWaveFrequency + edgeWavePhase) *
+        edgeWaveStrength *
+        edgeEnvelope;
+      const leftWidth = Math.max(0.2, width * (1 + edgeWave));
+      const rightWidth = Math.max(0.2, width * (1 - edgeWave * 0.9));
 
       left.push({
-        x: point.x + normal.x * width,
-        y: point.y + normal.y * width,
+        x: point.x + normal.x * leftWidth,
+        y: point.y + normal.y * leftWidth,
       });
       right.push({
-        x: point.x - normal.x * width,
-        y: point.y - normal.y * width,
+        x: point.x - normal.x * rightWidth,
+        y: point.y - normal.y * rightWidth,
       });
     }
 
@@ -987,10 +1074,16 @@ export function createTreeRenderer({
       Z`;
   }
 
-  function branchSurfacePaths(geometry, startWidth, endWidth, samples) {
+  function branchSurfacePaths(geometry, startWidth, endWidth, samples, options = {}) {
     return {
-      shadow: outlinePathFromGeometry(geometry, startWidth * 1.08, endWidth * 1.08, samples),
-      shell: outlinePathFromGeometry(geometry, startWidth, endWidth, samples),
+      shadow: outlinePathFromGeometry(
+        geometry,
+        startWidth * 1.08,
+        endWidth * 1.08,
+        samples,
+        options,
+      ),
+      shell: outlinePathFromGeometry(geometry, startWidth, endWidth, samples, options),
     };
   }
 
@@ -1287,7 +1380,6 @@ export function createTreeRenderer({
   }
 
   function drawScene(now) {
-    void now;
     defs.replaceChildren();
     defs.append(createBranchNoiseFilter());
     branchBackdrop.replaceChildren();
@@ -1312,13 +1404,14 @@ export function createTreeRenderer({
     for (const node of nodes) {
       if (!node.parentId) continue;
       const parent = state.nodes.get(node.parentId);
-      const geometry = branchGeometry(parent, node);
+      const motion = branchMotion(node, now);
+      const geometry = branchGeometryFromPoses(parent.render, node.render, node, motion || {});
       const startWidth = branchStartWidth(parent, node) * BRANCH_RENDER_SCALE * 0.5;
       const endWidth = branchEndWidth(node) * BRANCH_RENDER_SCALE * 0.5;
       const samples = node.slot === "trunk" ? 18 : 14;
 
       drawBranchSurface({
-        paths: branchSurfacePaths(geometry, startWidth, endWidth, samples),
+        paths: branchSurfacePaths(geometry, startWidth, endWidth, samples, motion || {}),
         barkTexture: branchBarkTexture(geometry, startWidth, endWidth, node.seed.curve, node.seed.warp),
         centerline: geometry.centerline,
         highlightWidth: Math.max(0.75, endWidth * 0.16),
@@ -1434,11 +1527,18 @@ export function createTreeRenderer({
       });
 
       if (!globallyDisabled && !node.ui.loading) {
-        tipButton.addEventListener("click", () => state.onExpandRequest(node.id));
+        const triggerExpand = () => state.onExpandRequest(node.id);
+        tipButton.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          triggerExpand();
+        });
+        tipButton.addEventListener("click", (event) => {
+          event.preventDefault();
+        });
         tipButton.addEventListener("keydown", (event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            state.onExpandRequest(node.id);
+            triggerExpand();
           }
         });
       }
