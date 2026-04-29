@@ -2,7 +2,7 @@ import { TreeController } from "./tree-controller.js";
 import { ApiTreeProvider, MockTreeProvider } from "./tree-provider.js";
 import { createTreeRenderer } from "./tree-renderer.js";
 
-const BUILD_VERSION = "Latest build marker: TREE_OVERLAY_PAN_V1 (2026-04-29)";
+const BUILD_VERSION = "Latest build marker: TREE_NODE_DETAIL_V1 (2026-04-29)";
 const VIEWBOX_WIDTH = 1000;
 const VIEWBOX_HEIGHT = 720;
 const PAN_LIMIT_X = 260;
@@ -28,6 +28,11 @@ const nodeInfoChildren = document.querySelector("#nodeInfoChildren");
 const nodeInfoExpandable = document.querySelector("#nodeInfoExpandable");
 const nodeInfoEmpty = document.querySelector("#nodeInfoEmpty");
 const nodeInfoMetadata = document.querySelector("#nodeInfoMetadata");
+const nodeDetailLayer = document.querySelector("#nodeDetailLayer");
+const nodeDetailTitle = document.querySelector("#nodeDetailTitle");
+const nodeDetailPath = document.querySelector("#nodeDetailPath");
+const nodeDetailBody = document.querySelector("#nodeDetailBody");
+const nodeDetailClose = document.querySelector("#nodeDetailClose");
 
 const panState = {
   x: 0,
@@ -38,6 +43,7 @@ const panState = {
   originX: 0,
   originY: 0,
   hasMoved: false,
+  lastDragEndedAt: 0,
 };
 
 function formatMetadataLabel(key) {
@@ -77,6 +83,18 @@ function resetViewportPosition() {
   applyViewportTransform();
 }
 
+function resolveNodeDescription(node) {
+  if (!node) return "";
+  if (node.description) return node.description;
+  if (typeof node.metadata?.fullDescription === "string" && node.metadata.fullDescription) {
+    return node.metadata.fullDescription;
+  }
+  if (typeof node.metadata?.description === "string" && node.metadata.description) {
+    return node.metadata.description;
+  }
+  return node.summary || "";
+}
+
 function setPanCursor(isPanning) {
   if (!canvasFrame) return;
   canvasFrame.classList.toggle("is-panning", isPanning);
@@ -86,6 +104,7 @@ function handlePanPointerDown(event) {
   if (!(event.target instanceof Element)) return;
   if (event.button !== 0) return;
   if (event.target.closest(".tip-button")) return;
+  if (event.target.closest(".topic-hit")) return;
   if (event.target.closest(".node-info-panel")) return;
 
   panState.pointerId = event.pointerId;
@@ -125,6 +144,10 @@ function finishPan(event) {
 
   if (treeSvg?.hasPointerCapture(event.pointerId)) {
     treeSvg.releasePointerCapture(event.pointerId);
+  }
+
+  if (panState.hasMoved) {
+    panState.lastDragEndedAt = performance.now();
   }
 
   panState.pointerId = null;
@@ -194,14 +217,66 @@ function renderNodeInfo(node) {
   }
 }
 
+function closeNodeDetail() {
+  if (!nodeDetailLayer) return;
+  nodeDetailLayer.hidden = true;
+}
+
+function openNodeDetail(node) {
+  if (!node || !nodeDetailLayer) return;
+
+  if (nodeDetailTitle) {
+    nodeDetailTitle.textContent = node.label || "Untitled topic";
+  }
+  if (nodeDetailPath) {
+    nodeDetailPath.textContent = node.path.join(" / ");
+  }
+  if (nodeDetailBody) {
+    nodeDetailBody.textContent =
+      resolveNodeDescription(node) ||
+      "No full description was returned for this node yet.";
+  }
+
+  nodeDetailLayer.hidden = false;
+}
+
+function setupNodeDetailPanel() {
+  if (!nodeDetailLayer) return;
+
+  nodeDetailClose?.addEventListener("click", () => {
+    closeNodeDetail();
+  });
+
+  nodeDetailLayer.addEventListener("click", (event) => {
+    if (event.target === nodeDetailLayer) {
+      closeNodeDetail();
+    }
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !nodeDetailLayer.hidden) {
+      closeNodeDetail();
+    }
+  });
+}
+
 if (buildBanner) {
   buildBanner.textContent = BUILD_VERSION;
 }
 renderNodeInfo(null);
 setupViewportPan();
+setupNodeDetailPanel();
 
 renderer.setHoverHandler((node) => {
   renderNodeInfo(node);
+});
+renderer.setNodeSelectHandler((node) => {
+  if (performance.now() - panState.lastDragEndedAt < 140) return;
+  if (!node) {
+    closeNodeDetail();
+    return;
+  }
+  openNodeDetail(node);
 });
 
 const controller = new TreeController({

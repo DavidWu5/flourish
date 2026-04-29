@@ -62,6 +62,27 @@
             <dl class="node-info-meta node-info-meta-list" id="nodeInfoMetadata"></dl>
           </section>
         </aside>
+
+        <div class="node-detail-layer" id="nodeDetailLayer" hidden>
+          <section
+            class="node-detail-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="nodeDetailTitle"
+          >
+            <div class="node-detail-header">
+              <div>
+                <p class="node-detail-eyebrow">Full description</p>
+                <h2 class="node-detail-title" id="nodeDetailTitle">Untitled topic</h2>
+                <p class="node-detail-path" id="nodeDetailPath"></p>
+              </div>
+              <button class="node-detail-close" id="nodeDetailClose" type="button" aria-label="Close full description">
+                Close
+              </button>
+            </div>
+            <div class="node-detail-body" id="nodeDetailBody"></div>
+          </section>
+        </div>
       </section>
     </main>
 

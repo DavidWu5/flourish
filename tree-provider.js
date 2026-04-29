@@ -12,19 +12,20 @@
  * });
  *
  * seed(topic) => {
- *   root: { id, label, parentId: null, summary?, expandable?, metadata? },
- *   nodes: [{ id, label, parentId, summary?, expandable?, metadata? }]
+ *   root: { id, label, parentId: null, summary?, description?, expandable?, metadata? },
+ *   nodes: [{ id, label, parentId, summary?, description?, expandable?, metadata? }]
  * }
  *
  * expand(nodeId, context) => {
  *   parentId: nodeId,
- *   parentPatch?: { expandable?, summary?, metadata? },
- *   nodes: [{ id, label, parentId, summary?, expandable?, metadata? }]
+ *   parentPatch?: { expandable?, summary?, description?, metadata? },
+ *   nodes: [{ id, label, parentId, summary?, description?, expandable?, metadata? }]
  * }
  *
  * Notes:
  * - `label` is the node topic shown on hover in the frontend.
  * - `summary` is supporting text shown in the right-side hover info panel.
+ * - `description` is the longer text shown when the user clicks a node.
  * - `metadata` is optional structured info also shown in the hover panel.
  */
 export class TreeProvider {
@@ -78,12 +79,13 @@ export class MockTreeProvider extends TreeProvider {
     this.nextId = 0;
   }
 
-  makeNode({ label, parentId, summary, expandable = true, metadata = {} }) {
+  makeNode({ label, parentId, summary, description, expandable = true, metadata = {} }) {
     return {
       id: `topic-${this.nextId++}`,
       label,
       parentId,
       summary,
+      description: description || summary,
       expandable,
       metadata,
     };
@@ -98,6 +100,7 @@ export class MockTreeProvider extends TreeProvider {
         label: topic,
         parentId: null,
         summary: `A learning tree for ${topic}.`,
+        description: `${topic} is the root of this learning tree. Open its branches to explore the major ideas, then click any node when you want the fuller explanation instead of the short hover summary.`,
         expandable: true,
         metadata: {
           role: "Root topic",
@@ -128,6 +131,7 @@ export class MockTreeProvider extends TreeProvider {
           label,
           parentId: nodeId,
           summary,
+          description: `${summary} This node is part of the ${context.nodeLabel} branch, and it is intended to give the learner a stronger understanding of how this concept fits into the broader path ${context.path.join(" -> ")}.`,
           expandable: nextDepth < this.maxDepth,
           metadata: {
             depth: nextDepth,

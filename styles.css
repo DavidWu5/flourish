@@ -198,6 +198,90 @@ body::before {
   margin-top: 4px;
 }
 
+.node-detail-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 11, 9, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+.node-detail-layer[hidden] {
+  display: none;
+}
+
+.node-detail-panel {
+  width: min(720px, calc(100% - 16px));
+  max-height: min(78vh, calc(100% - 16px));
+  overflow: auto;
+  padding: 24px 24px 22px;
+  border: 1px solid rgba(255, 244, 232, 0.12);
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 248, 0.98), rgba(247, 238, 228, 0.95));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+}
+
+.node-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.node-detail-eyebrow {
+  margin: 0 0 8px;
+  color: rgba(98, 61, 43, 0.76);
+  font:
+    700 11px/1.2 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
+    monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.node-detail-title {
+  margin: 0;
+  color: #24130d;
+  font: 600 32px/1.02 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.node-detail-path {
+  margin: 10px 0 0;
+  color: rgba(74, 48, 35, 0.76);
+  font: 500 13px/1.45 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.node-detail-close {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(58, 35, 24, 0.92);
+  color: rgba(255, 246, 235, 0.98);
+  font:
+    700 11px/1 "SF Mono", "Monaco", "Consolas", "Liberation Mono",
+    monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.node-detail-close:hover {
+  background: rgba(40, 22, 15, 0.98);
+}
+
+.node-detail-body {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(94, 62, 45, 0.12);
+  color: #352117;
+  font: 500 15px/1.7 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  white-space: pre-wrap;
+}
+
 #treeSvg {
   display: block;
   width: 100%;
@@ -439,5 +523,23 @@ body::before {
   .canvas-hint {
     left: 10px;
     bottom: calc(min(48%, 360px) + 22px);
+  }
+
+  .node-detail-layer {
+    padding: 10px;
+  }
+
+  .node-detail-panel {
+    width: 100%;
+    max-height: calc(100% - 8px);
+    padding: 20px 18px 18px;
+  }
+
+  .node-detail-header {
+    flex-direction: column;
+  }
+
+  .node-detail-title {
+    font-size: 28px;
   }
 }

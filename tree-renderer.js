@@ -5,6 +5,11 @@ const HEIGHT = 720;
 const ROOT_X = WIDTH / 2;
 const ROOT_Y = HEIGHT - 48;
 const GROW_DURATION = 1250;
+const GROW_DURATION_VARIANCE = 320;
+const GROW_STAGGER_BASE = 82;
+const GROW_STAGGER_VARIANCE = 64;
+const MIDDLE_BRANCH_START_ADVANCE = 110;
+const MIDDLE_BRANCH_DURATION_MULTIPLIER = 0.76;
 const EMPHASIS_FADE_DURATION = 180;
 const BRANCH_RENDER_SCALE = 0.9;
 const BRANCH_GRADIENT_LAYERS = 12;
@@ -37,8 +42,10 @@ export function createTreeRenderer({
     lastNow: performance.now(),
     hoverPathNodeId: null,
     hoveredNodeId: null,
+    selectedNodeId: null,
     onExpandRequest: () => {},
     onHoverChange: () => {},
+    onNodeSelect: () => {},
   };
 
   svg.addEventListener("mouseleave", () => {
@@ -90,6 +97,7 @@ export function createTreeRenderer({
       id: data.id,
       label: data.label || data.id,
       summary: data.summary || "",
+      description: data.description || data.summary || "",
       metadata: data.metadata || {},
       parentId: data.parentId ?? null,
       children: [],
@@ -328,8 +336,18 @@ export function createTreeRenderer({
     if (!node) return;
     if (Object.hasOwn(patch, "label")) node.label = patch.label;
     if (Object.hasOwn(patch, "summary")) node.summary = patch.summary || "";
+    if (Object.hasOwn(patch, "description")) {
+      node.description = patch.description || patch.summary || "";
+    } else if (Object.hasOwn(patch, "summary") && !node.description) {
+      node.description = patch.summary || "";
+    }
     if (Object.hasOwn(patch, "metadata")) node.metadata = patch.metadata || {};
     if (Object.hasOwn(patch, "expandable")) node.expandable = patch.expandable !== false;
+  }
+
+  function setSelectedNode(nodeId = null) {
+    state.selectedNodeId = nodeId && state.nodes.has(nodeId) ? nodeId : null;
+    state.onNodeSelect(state.selectedNodeId ? getNodeDetails(state.selectedNodeId) : null);
   }
 
   function buildNodePathIds(nodeId) {
@@ -418,7 +436,9 @@ export function createTreeRenderer({
     state.emphasisAnimation = null;
     state.hoverPathNodeId = null;
     state.hoveredNodeId = null;
+    state.selectedNodeId = null;
     state.onHoverChange(null);
+    state.onNodeSelect(null);
 
     if (!snapshot?.root) {
       throw new Error("Tree snapshot must include a root node");
@@ -507,6 +527,9 @@ export function createTreeRenderer({
       if (state.hoveredNodeId === parentId) {
         state.onHoverChange(getNodeDetails(parentId));
       }
+      if (state.selectedNodeId === parentId) {
+        state.onNodeSelect(getNodeDetails(parentId));
+      }
       drawScene(now);
       return;
     }
@@ -514,15 +537,53 @@ export function createTreeRenderer({
     hydrateHierarchy(state.rootId);
     layoutTree();
 
+    const childTimings = new Map();
+    let animationEnd = now;
+    const centerChildId =
+      freshNodes.length >= 3 && freshNodes.length % 2 === 1
+        ? freshNodes.find((nodeId) => Math.abs(state.nodes.get(nodeId)?.side || 1) < 0.001) || null
+        : null;
+
+    freshNodes.forEach((nodeId, index) => {
+      const child = state.nodes.get(nodeId);
+      if (!child) return;
+      const isMiddleChild = nodeId === centerChildId;
+
+      const startOffset = Math.max(
+        0,
+        index * GROW_STAGGER_BASE +
+          lerp(0, GROW_STAGGER_VARIANCE, child.seed.curve) -
+          (isMiddleChild ? MIDDLE_BRANCH_START_ADVANCE : 0),
+      );
+      const durationBase =
+        GROW_DURATION + lerp(-GROW_DURATION_VARIANCE, GROW_DURATION_VARIANCE, child.seed.length);
+      const duration = isMiddleChild
+        ? durationBase * MIDDLE_BRANCH_DURATION_MULTIPLIER
+        : durationBase;
+      const start = now + startOffset;
+      const end = start + duration;
+
+      childTimings.set(nodeId, {
+        start,
+        end,
+        duration,
+      });
+      animationEnd = Math.max(animationEnd, end);
+    });
+
     state.animation = {
       newChildIds: new Set(freshNodes),
+      childTimings,
       sourceId: parentId,
       start: now,
-      end: now + GROW_DURATION,
+      end: animationEnd,
     };
 
     if (state.hoveredNodeId === parentId) {
       state.onHoverChange(getNodeDetails(parentId));
+    }
+    if (state.selectedNodeId === parentId) {
+      state.onNodeSelect(getNodeDetails(parentId));
     }
 
     runAnimationLoop();
@@ -534,6 +595,10 @@ export function createTreeRenderer({
 
   function setHoverHandler(handler) {
     state.onHoverChange = typeof handler === "function" ? handler : () => {};
+  }
+
+  function setNodeSelectHandler(handler) {
+    state.onNodeSelect = typeof handler === "function" ? handler : () => {};
   }
 
   function setNodeLoading(nodeId, loading) {
@@ -556,6 +621,9 @@ export function createTreeRenderer({
     patchPublicNode(node, patch);
     if (state.hoveredNodeId === nodeId) {
       state.onHoverChange(getNodeDetails(nodeId));
+    }
+    if (state.selectedNodeId === nodeId) {
+      state.onNodeSelect(getNodeDetails(nodeId));
     }
     if (!state.animation) drawScene(state.lastNow);
   }
@@ -775,11 +843,8 @@ export function createTreeRenderer({
       return;
     }
 
-    const growT = clamp((now - animation.start) / GROW_DURATION, 0, 1);
-    const settleMix = easeOutBack(clamp(growT * 1.03, 0, 1), 0.68);
-    const tipGrowthMix = easeOutCubic(clamp(growT * 1.02, 0, 1));
-    const thicknessMix = easeOutCubic(clamp((growT - 0.14) / 0.86, 0, 1));
-    const growthBendScale = 1 + Math.sin(tipGrowthMix * Math.PI) * 0.14;
+    const animationDuration = Math.max(1, animation.end - animation.start);
+    const growT = clamp((now - animation.start) / animationDuration, 0, 1);
 
     for (const node of state.nodes.values()) {
       if (animation.newChildIds.has(node.id)) continue;
@@ -806,6 +871,13 @@ export function createTreeRenderer({
     for (const nodeId of animation.newChildIds) {
       const node = state.nodes.get(nodeId);
       if (!node) continue;
+      const timing = animation.childTimings?.get(nodeId);
+      const localDuration = Math.max(1, timing?.duration ?? GROW_DURATION);
+      const localGrowT = clamp((now - (timing?.start ?? animation.start)) / localDuration, 0, 1);
+      const settleMix = easeOutBack(clamp(localGrowT * 1.03, 0, 1), 0.68);
+      const tipGrowthMix = easeOutCubic(clamp(localGrowT * 1.02, 0, 1));
+      const thicknessMix = easeOutCubic(clamp((localGrowT - 0.14) / 0.86, 0, 1));
+      const growthBendScale = 1 + Math.sin(tipGrowthMix * Math.PI) * 0.14;
 
       const parent = node.parentId ? state.nodes.get(node.parentId) : null;
       const settledPose = {
@@ -1359,6 +1431,11 @@ export function createTreeRenderer({
   function attachNodeInteractions(target, node) {
     target.addEventListener("mouseenter", () => setHoverState(node.id, node.id));
     target.addEventListener("mouseleave", () => clearHoverState(node.id, node.id));
+    target.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectedNode(node.id);
+    });
   }
 
   function attachBranchInteractions(target, nodeId) {
@@ -1455,6 +1532,9 @@ export function createTreeRenderer({
           cy: node.render.y.toFixed(2),
           r: Math.max(24, node.render.thickness * 1.02).toFixed(2),
           class: "topic-hit",
+          tabindex: 0,
+          role: "button",
+          "aria-label": `Open details for ${node.label}`,
         });
         attachNodeInteractions(rootHit, node);
         nodeGroup.append(rootHit);
@@ -1480,6 +1560,9 @@ export function createTreeRenderer({
         cy: node.render.y.toFixed(2),
         r: Math.max(16, node.render.thickness * 1.18).toFixed(2),
         class: "topic-hit",
+        tabindex: 0,
+        role: "button",
+        "aria-label": `Open details for ${node.label}`,
       });
       attachNodeInteractions(hit, node);
 
@@ -1616,6 +1699,7 @@ export function createTreeRenderer({
       id: node.id,
       label: node.label,
       summary: node.summary,
+      description: node.description,
       metadata: node.metadata,
       depth: node.depth,
       expandable: node.expandable,
@@ -1635,6 +1719,7 @@ export function createTreeRenderer({
       nodeId: node.id,
       nodeLabel: node.label,
       summary: node.summary,
+      description: node.description,
       depth: node.depth,
       expandable: node.expandable,
       path: details.path,
@@ -1648,6 +1733,7 @@ export function createTreeRenderer({
       label: node.label,
       parentId: node.parentId,
       summary: node.summary,
+      description: node.description,
       expandable: node.expandable,
       metadata: node.metadata,
     };
@@ -1674,6 +1760,7 @@ export function createTreeRenderer({
     patchNode,
     setExpandHandler,
     setHoverHandler,
+    setNodeSelectHandler,
     setNodeError,
     setNodeLoading,
     setTree,
