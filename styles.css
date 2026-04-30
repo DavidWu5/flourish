@@ -1439,12 +1439,14 @@ body::before {
   padding-inline: 16px;
 }
 
-.question-panel-submit {
+.question-panel-submit,
+.topic-modal-submit {
   background: var(--green);
   box-shadow: 0 10px 24px rgba(29, 56, 8, 0.22);
 }
 
-.question-panel-submit:hover {
+.question-panel-submit:hover,
+.topic-modal-submit:hover {
   background: #1a4a06;
   box-shadow: 0 14px 28px rgba(29, 56, 8, 0.28);
 }
