@@ -75,6 +75,8 @@ const nodeDetailBody = document.querySelector("#nodeDetailBody");
 const nodeDetailClose = document.querySelector("#nodeDetailClose");
 const nodeDetailCta = document.querySelector("#nodeDetailCta");
 const nodeDetailExplain = document.querySelector("#nodeDetailExplain");
+const nodeDetailStatus = document.querySelector("#nodeDetailStatus");
+const nodeDetailInsights = document.querySelector("#nodeDetailInsights");
 
 const panState = {
   x: 0,
@@ -100,8 +102,38 @@ const petalParticleState = {
 };
 
 let hoveredNode = null;
+let activeDetailNode = null;
 let topicLabelTimerId = 0;
 let petalParticleIdSequence = 0;
+
+const detailInsightCache = new Map();
+const detailActionState = {
+  questionBusy: false,
+  explainBusy: false,
+};
+
+const EXPLAIN_LENSES = [
+  {
+    id: "intuition",
+    buttonLabel: "Explain more",
+    status: "Finding a calmer, clearer way into this idea...",
+  },
+  {
+    id: "analogy",
+    buttonLabel: "Show another angle",
+    status: "Looking for an analogy that makes this branch feel familiar...",
+  },
+  {
+    id: "example",
+    buttonLabel: "Show another angle",
+    status: "Building a tiny example you can hold onto...",
+  },
+  {
+    id: "big-picture",
+    buttonLabel: "Show another angle",
+    status: "Connecting this branch back to the bigger tree...",
+  },
+];
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -686,6 +718,30 @@ function renderNodeInfo(node) {
   }
 }
 
+function getTopicLabel() {
+  return controller.getSnapshot()?.root?.label || controller.initialTopic || "Learning Tree";
+}
+
+function createNodeDetailApi() {
+  return {
+    async explain(payload) {
+      const response = await globalThis.fetch("/api/node/explain", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Explain failed: ${response.status} ${response.statusText}`);
+      }
+
+      return response.json();
+    },
+  };
+}
+
 function snapshotHasActiveTopic(snapshot) {
   const root = snapshot?.root;
   if (!root) return false;
@@ -708,10 +764,99 @@ function syncNodeInfoPanelVisibility(snapshot) {
 function closeNodeDetail() {
   if (!nodeDetailLayer) return;
   nodeDetailLayer.hidden = true;
+  activeDetailNode = null;
+  setNodeDetailStatus("", "info");
+}
+
+function setNodeDetailStatus(message = "", tone = "info") {
+  if (!nodeDetailStatus) return;
+  const text = String(message || "").trim();
+  nodeDetailStatus.hidden = !text;
+  nodeDetailStatus.dataset.tone = text ? tone : "";
+  nodeDetailStatus.textContent = text;
+}
+
+function createInsightCard(title, body, tone = "support") {
+  const card = document.createElement("article");
+  card.className = "node-detail-insight-card";
+  card.dataset.tone = tone;
+
+  const heading = document.createElement("h3");
+  heading.className = "node-detail-insight-card-title";
+  heading.textContent = title;
+
+  const content = document.createElement("p");
+  content.className = "node-detail-insight-body";
+  content.textContent = body;
+
+  card.append(heading, content);
+  return card;
+}
+
+function renderNodeDetailInsights(node) {
+  if (!nodeDetailInsights) return;
+
+  const cached = node ? detailInsightCache.get(node.id) : null;
+  if (!cached?.response) {
+    nodeDetailInsights.hidden = true;
+    nodeDetailInsights.replaceChildren();
+    return;
+  }
+
+  const intro = document.createElement("article");
+  intro.className = "node-detail-insight-intro";
+
+  const kicker = document.createElement("p");
+  kicker.className = "node-detail-insight-kicker";
+  kicker.textContent = cached.response.perspective_label || "A gentler way in";
+
+  const title = document.createElement("h3");
+  title.className = "node-detail-insight-title";
+  title.textContent = cached.response.spark_title || "Here’s the shape of it";
+
+  const body = document.createElement("p");
+  body.className = "node-detail-insight-body";
+  body.textContent = cached.response.gentle_explanation || "";
+
+  intro.append(kicker, title, body);
+
+  const grid = document.createElement("div");
+  grid.className = "node-detail-insight-grid";
+  grid.append(
+    createInsightCard("Think of it like this", cached.response.analogy, "analogy"),
+    createInsightCard("Tiny example", cached.response.micro_example, "example"),
+    createInsightCard("Why this branch matters", cached.response.why_it_matters, "support"),
+    createInsightCard("Try this next", `${cached.response.next_step_prompt}\n\n${cached.response.encouragement}`, "support"),
+  );
+
+  nodeDetailInsights.hidden = false;
+  nodeDetailInsights.replaceChildren(intro, grid);
+}
+
+function updateNodeDetailActionLabels(node = activeDetailNode) {
+  if (nodeDetailCta) {
+    nodeDetailCta.textContent = node?.metadata?.question
+      ? "Test your understanding"
+      : "Turn this into a question";
+  }
+
+  if (nodeDetailExplain) {
+    const explainCount = node ? detailInsightCache.get(node.id)?.count || 0 : 0;
+    nodeDetailExplain.textContent =
+      explainCount > 0 ? "Show another angle" : "Explain more";
+  }
+}
+
+function syncNodeDetailActionState() {
+  const isBusy = detailActionState.questionBusy || detailActionState.explainBusy;
+  if (nodeDetailCta) nodeDetailCta.disabled = isBusy;
+  if (nodeDetailExplain) nodeDetailExplain.disabled = isBusy;
+  if (nodeDetailClose) nodeDetailClose.disabled = isBusy;
 }
 
 function openNodeDetail(node) {
   if (!node || !nodeDetailLayer) return;
+  activeDetailNode = node;
 
   if (nodeDetailTitle) {
     nodeDetailTitle.textContent = node.label || "Untitled topic";
@@ -725,12 +870,16 @@ function openNodeDetail(node) {
       "No full description was returned for this node yet.";
   }
   if (nodeDetailCta) {
-    nodeDetailCta.hidden = !Boolean(node.metadata?.question);
+    nodeDetailCta.hidden = false;
   }
   if (nodeDetailExplain) {
-    nodeDetailExplain.hidden = !resolveNodeDescription(node);
+    nodeDetailExplain.hidden = !Boolean(resolveNodeDescription(node) || node.summary);
   }
 
+  setNodeDetailStatus("", "info");
+  renderNodeDetailInsights(node);
+  updateNodeDetailActionLabels(node);
+  syncNodeDetailActionState();
   nodeDetailLayer.hidden = false;
 }
 
@@ -752,6 +901,55 @@ function setupNodeDetailPanel() {
       closeNodeDetail();
     }
   });
+}
+
+async function explainActiveNode() {
+  const node = activeDetailNode;
+  if (!node) return;
+
+  const explainCount = detailInsightCache.get(node.id)?.count || 0;
+  const lens = EXPLAIN_LENSES[explainCount % EXPLAIN_LENSES.length];
+  detailActionState.explainBusy = true;
+  syncNodeDetailActionState();
+  setNodeDetailStatus(lens.status, "info");
+
+  try {
+    const response = await createNodeDetailApi().explain({
+      topic: getTopicLabel(),
+      nodeId: node.id,
+      nodeLabel: node.label,
+      summary: node.summary,
+      description: resolveNodeDescription(node),
+      path: node.path,
+      lens: lens.id,
+      lastUnderstandingLevel: node.metadata?.lastUnderstandingLevel || "",
+      lastFeedbackMessage: node.metadata?.lastFeedbackMessage || "",
+      lastMisconception: node.metadata?.lastMisconception || "",
+      missingPrerequisite: node.metadata?.lastMissingPrerequisite || "",
+    });
+
+    detailInsightCache.set(node.id, {
+      count: explainCount + 1,
+      response,
+    });
+
+    if (activeDetailNode?.id === node.id) {
+      renderNodeDetailInsights(activeDetailNode);
+      updateNodeDetailActionLabels(activeDetailNode);
+      setNodeDetailStatus(response.encouragement || "You can keep exploring this branch from a few different angles.", "success");
+    }
+  } catch (error) {
+    console.error("Explain more failed", error);
+    setNodeDetailStatus(
+      error instanceof Error && error.message
+        ? error.message
+        : "Something went wrong while building a clearer explanation.",
+      "error",
+    );
+  } finally {
+    detailActionState.explainBusy = false;
+    syncNodeDetailActionState();
+  }
 }
 
 function setupSpacebarDetailShortcut() {
@@ -834,17 +1032,42 @@ const questionFlow = setupQuestionFlow({
 });
 
 if (nodeDetailCta) {
-  nodeDetailCta.addEventListener("click", () => {
-    if (hoveredNode) {
-      closeNodeDetail();
-      questionFlow.openQuestion(hoveredNode);
+  nodeDetailCta.addEventListener("click", async () => {
+    if (activeDetailNode) {
+      const detailNode = activeDetailNode;
+      detailActionState.questionBusy = true;
+      syncNodeDetailActionState();
+      setNodeDetailStatus(
+        detailNode.metadata?.question
+          ? "Opening a quick check-in question for this branch..."
+          : "Turning this branch into a question that checks understanding, not memorization...",
+        "info",
+      );
+
+      try {
+        const result = await questionFlow.openQuestion(detailNode);
+        if (result?.opened) {
+          closeNodeDetail();
+          return;
+        }
+
+        if (result?.message) {
+          setNodeDetailStatus(
+            result.message,
+            result.reason === "error" ? "error" : "info",
+          );
+        }
+      } finally {
+        detailActionState.questionBusy = false;
+        syncNodeDetailActionState();
+      }
     }
   });
 }
 
 if (nodeDetailExplain) {
   nodeDetailExplain.addEventListener("click", () => {
-    if (hoveredNode) openNodeDetail(hoveredNode);
+    void explainActiveNode();
   });
 }
 

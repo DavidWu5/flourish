@@ -1,9 +1,9 @@
 import '../env.js';
 import { GoogleGenAI } from '@google/genai';
 
-export const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
+const apiKey = String(process.env.GEMINI_API_KEY || '').trim();
+
+export const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 function stripCodeFences(text) {
   return String(text || '')
@@ -16,11 +16,15 @@ function stripCodeFences(text) {
 
 export async function responseText(response) {
   if (!response) return '';
+  if (typeof response.text === 'function') {
+    return stripCodeFences(await response.text());
+  }
   if (typeof response.text === 'string') return stripCodeFences(response.text);
   return '';
 }
 
 export async function generateText({ model, prompt, config } = {}) {
+  if (!ai) return null;
   try {
     const response = await ai.models.generateContent({
       model,
@@ -40,6 +44,7 @@ export async function generateStructuredJson({
   schema,
   config = {},
 } = {}) {
+  if (!ai) return null;
   try {
     const response = await ai.models.generateContent({
       model,

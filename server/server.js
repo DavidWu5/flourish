@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import seedRoute from './routes/seed.js';
 import expandRoute from './routes/expand.js';
 import diagnoseRoute from './routes/diagnose.js';
+import explainRoute from './routes/explain.js';
+import questionRoute from './routes/question.js';
 
 const app = express();
 app.use(express.json({ limit: '256kb' }));
@@ -13,6 +15,8 @@ app.use(express.json({ limit: '256kb' }));
 app.post('/api/tree/seed', seedRoute);
 app.post('/api/tree/expand', expandRoute);
 app.post('/api/node/diagnose', diagnoseRoute);
+app.post('/api/node/explain', explainRoute);
+app.post('/api/node/question', questionRoute);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(here, '..');

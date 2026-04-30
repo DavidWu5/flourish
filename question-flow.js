@@ -15,6 +15,21 @@ function createDefaultApi() {
 
       return response.json();
     },
+    async generateQuestion(payload) {
+      const response = await globalThis.fetch("/api/node/question", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Question generation failed: ${response.status} ${response.statusText}`);
+      }
+
+      return response.json();
+    },
   };
 }
 
@@ -117,8 +132,20 @@ export function setupQuestionFlow({
       getPanelQuestion(node) ||
       "This branch does not have a diagnostic question yet.";
     clearAnswer();
+    if (node?.metadata?.questionEncouragement) {
+      setPanelStatus(node.metadata.questionEncouragement, "info");
+    }
     setSubmitting(false);
     focusAnswer();
+  }
+
+  function showQuestionPreparation(node, message) {
+    activeNode = node;
+    panel.hidden = false;
+    title.textContent = node.label ? `What do you understand about "${node.label}"?` : "Think it through...";
+    prompt.textContent = message;
+    clearAnswer();
+    setSubmitting(true);
   }
 
   function getLockedMessage(node) {
@@ -134,20 +161,129 @@ export function setupQuestionFlow({
     return `Something's missing — try ${prerequisiteLabel} first.`;
   }
 
-  function openQuestion(node) {
-    const question = getPanelQuestion(node);
-    if (!question) {
-      hidePanel();
-      return;
+  async function ensureQuestion(node) {
+    const existingQuestion = getPanelQuestion(node);
+    if (existingQuestion) {
+      return {
+        node,
+        reason: "ready",
+        message: String(node?.metadata?.questionEncouragement || "").trim(),
+      };
     }
 
     const lockedMessage = getLockedMessage(node);
     if (lockedMessage) {
       hidePanel();
-      return;
+      return {
+        node: null,
+        reason: "locked",
+        message: lockedMessage,
+      };
     }
 
-    showPanel(node);
+    showQuestionPreparation(
+      node,
+      "I’m turning this branch into a question that checks understanding, not memorization.",
+    );
+
+    try {
+      const api = typeof getApi === "function" ? getApi() : createDefaultApi();
+      const generated = await api.generateQuestion({
+        topic: getTopicLabel(),
+        nodeId: node.id,
+        nodeLabel: node.label,
+        summary: node.summary,
+        description: node.description,
+        path: node.path,
+        metadata: node.metadata,
+      });
+
+      const question = String(generated?.question || "").trim();
+      const encouragement = String(generated?.encouragement || "").trim();
+      if (!question) {
+        hidePanel();
+        return {
+          node: null,
+          reason: "unavailable",
+          message: "I couldn't turn this branch into a question yet. Try again in a moment.",
+        };
+      }
+
+      patchNodeMetadata(node.id, (currentMetadata) => ({
+        ...currentMetadata,
+        question,
+        questionEncouragement: encouragement,
+      }));
+
+      return {
+        node: getNodeRecord(node.id) || {
+          ...node,
+          metadata: {
+            ...node.metadata,
+            question,
+            questionEncouragement: encouragement,
+          },
+        },
+        reason: "ready",
+        message: encouragement,
+      };
+    } catch (error) {
+      console.error("Question generation failed", error);
+      hidePanel();
+      return {
+        node: null,
+        reason: "error",
+        message:
+          error instanceof Error && error.message
+            ? error.message
+            : "Something went wrong while building a question for this branch.",
+      };
+    }
+  }
+
+  async function openQuestion(node) {
+    const lockedMessage = getLockedMessage(node);
+    if (lockedMessage) {
+      hidePanel();
+      return {
+        opened: false,
+        reason: "locked",
+        message: lockedMessage,
+      };
+    }
+
+    let resolvedNode = node;
+    if (!getPanelQuestion(resolvedNode)) {
+      const ensured = await ensureQuestion(node);
+      if (!ensured?.node) {
+        return {
+          opened: false,
+          reason: ensured?.reason || "unavailable",
+          message:
+            ensured?.message ||
+            "I couldn't turn this branch into a question yet. Try again in a moment.",
+        };
+      }
+      resolvedNode = ensured.node;
+    }
+
+    const question = getPanelQuestion(resolvedNode);
+    if (!question) {
+      hidePanel();
+      return {
+        opened: false,
+        reason: "unavailable",
+        message: "I couldn't turn this branch into a question yet. Try again in a moment.",
+      };
+    }
+
+    showPanel(resolvedNode);
+    return {
+      opened: true,
+      reason: "ready",
+      node: resolvedNode,
+      message: String(resolvedNode?.metadata?.questionEncouragement || "").trim(),
+    };
   }
 
   function patchNodeMetadata(nodeId, updater) {
@@ -255,6 +391,10 @@ export function setupQuestionFlow({
           ...currentMetadata,
           status: "locked",
           prerequisiteNodeId: prerequisiteNode.id,
+          lastUnderstandingLevel: diagnosis.understanding_level,
+          lastFeedbackMessage: diagnosis.feedback_message || "",
+          lastMisconception: diagnosis.misconception || "",
+          lastMissingPrerequisite: diagnosis.missing_prerequisite || "",
         }));
         appendPrerequisiteNode(node.id, prerequisiteNode);
         hidePanel();
@@ -266,6 +406,10 @@ export function setupQuestionFlow({
           ...currentMetadata,
           status: "complete",
           prerequisiteNodeId: null,
+          lastUnderstandingLevel: diagnosis.understanding_level,
+          lastFeedbackMessage: diagnosis.feedback_message || "",
+          lastMisconception: diagnosis.misconception || "",
+          lastMissingPrerequisite: diagnosis.missing_prerequisite || "",
         }));
         unlockParentIfPrerequisiteComplete(node.id);
         hidePanel();
@@ -277,6 +421,13 @@ export function setupQuestionFlow({
         return;
       }
 
+      patchNodeMetadata(node.id, (currentMetadata) => ({
+        ...currentMetadata,
+        lastUnderstandingLevel: diagnosis.understanding_level,
+        lastFeedbackMessage: diagnosis.feedback_message || "",
+        lastMisconception: diagnosis.misconception || "",
+        lastMissingPrerequisite: diagnosis.missing_prerequisite || "",
+      }));
       setPanelStatus(
         diagnosis.feedback_message ||
           "Not quite yet — take another swing at this branch.",
@@ -321,7 +472,7 @@ export function setupQuestionFlow({
       }
       return;
     }
-    openQuestion(node);
+    void openQuestion(node);
   });
 
   // Gate expansion: if a node has an unanswered question, show it instead of expanding
@@ -334,7 +485,7 @@ export function setupQuestionFlow({
       const isAnswered = node?.metadata?.status === "complete";
 
       if (hasQuestion && !isAnswered) {
-        openQuestion(node);
+        void openQuestion(node);
         return false;
       }
       return true;
