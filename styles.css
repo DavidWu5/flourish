@@ -133,25 +133,17 @@ body::before {
 }
 
 .petal-particles {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  overflow: hidden;
   pointer-events: none;
 }
 
 .petal-particle {
-  position: absolute;
-  top: 0;
-  left: 0;
   display: block;
   width: 22px;
   height: 22px;
   opacity: 0;
-  filter: drop-shadow(0 3px 6px rgba(242, 189, 208, 0.2));
-  transform-origin: 50% 50%;
-  will-change: transform, opacity;
+  filter: drop-shadow(0 5px 9px rgba(242, 189, 208, 0.32));
   overflow: visible;
+  pointer-events: none;
 }
 
 .petal-particle-shape {
@@ -689,6 +681,21 @@ body::before {
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
+}
+
+.branch-preview-pulse,
+.branch-preview-pulse-glow {
+  pointer-events: none;
+}
+
+.branch-preview-pulse {
+  fill: rgba(242, 189, 208, 0.18);
+  mix-blend-mode: screen;
+}
+
+.branch-preview-pulse-glow {
+  fill: rgba(242, 189, 208, 0.28);
+  filter: blur(8px);
 }
 
 .branch-enchant-glow,

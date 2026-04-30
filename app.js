@@ -23,10 +23,13 @@ const TREE_FOCUS_PADDING = 24;
 const TREE_TOPIC_LABEL_X = VIEWBOX_WIDTH / 2;
 const TREE_TOPIC_LABEL_Y = 700;
 const TREE_TOPIC_TYPE_SPEED_MS = 44;
-const PETAL_PARTICLE_COUNT = 14;
-const PETAL_PARTICLE_MOBILE_COUNT = 10;
-const PETAL_PARTICLE_SPAWN_MIN_X = 0.18;
-const PETAL_PARTICLE_SPAWN_MAX_X = 0.82;
+const PETAL_PARTICLE_COUNT = 30;
+const PETAL_PARTICLE_MOBILE_COUNT = 20;
+const PETAL_PARTICLE_SPAWN_MIN_X = 0.14;
+const PETAL_PARTICLE_SPAWN_MAX_X = 0.86;
+const PETAL_PARTICLE_GROUND_Y = 688;
+const PETAL_PARTICLE_REST_DURATION_S = 1.08;
+const PETAL_PARTICLE_REST_FADE_START_S = 0.8;
 const PETAL_SVG_PATH =
   "M45.124,87.882C42.238,89.849 38.752,91 35,91C25.066,91 17,82.934 17,73C17,63.677 24.104,56 33.189,55.09C28.261,51.877 25,46.317 25,40C25,30.066 33.066,22 43,22C50.371,22 56.714,26.441 59.496,32.79C61.393,24.884 68.515,19 77,19C86.934,19 95,27.066 95,37C95,42.703 92.342,47.79 88.198,51.089C88.791,51.03 89.392,51 90,51C99.934,51 108,59.066 108,69C108,78.934 99.934,87 90,87C86.279,87 82.821,85.869 79.95,83.931C80.63,85.828 81,87.871 81,90C81,99.934 72.934,108 63,108C53.066,108 45,99.934 45,90C45,89.283 45.042,88.577 45.124,87.882Z";
 
@@ -250,15 +253,15 @@ function animateTreeTopicLabel(topic) {
 }
 
 function refreshPetalParticleBounds() {
-  const width = petalParticles?.clientWidth || canvasFrame?.clientWidth || 0;
-  const height = petalParticles?.clientHeight || canvasFrame?.clientHeight || 0;
+  const width = VIEWBOX_WIDTH;
+  const height = VIEWBOX_HEIGHT;
   petalParticleState.width = width;
   petalParticleState.height = height;
   return { width, height };
 }
 
 function targetPetalParticleCount() {
-  const width = petalParticleState.width || window.innerWidth;
+  const width = treeSvg?.clientWidth || canvasFrame?.clientWidth || window.innerWidth;
   return width <= 820 ? PETAL_PARTICLE_MOBILE_COUNT : PETAL_PARTICLE_COUNT;
 }
 
@@ -266,25 +269,33 @@ function resetPetalParticle(particle, { stagger = false } = {}) {
   const { width, height } = refreshPetalParticleBounds();
   if (!width || !height) return;
 
-  const size = randomBetween(16, 28);
+  const size = randomBetween(20, 36);
   particle.size = size;
   particle.baseX = randomBetween(width * PETAL_PARTICLE_SPAWN_MIN_X, width * PETAL_PARTICLE_SPAWN_MAX_X);
+  particle.groundY = PETAL_PARTICLE_GROUND_Y - randomBetween(-2, 8);
   particle.y = stagger
-    ? randomBetween(-height * 0.08, height * 0.76)
-    : randomBetween(-height * 0.22, -size * 1.4);
+    ? randomBetween(-height * 0.08, height * 0.72)
+    : randomBetween(-height * 0.24, -size * 1.6);
   particle.elapsed = randomBetween(0, 4.2);
-  particle.fallSpeed = randomBetween(20, 38);
-  particle.crossDrift = randomBetween(-7, 7);
-  particle.driftAmplitude = randomBetween(8, 22);
-  particle.driftFrequency = randomBetween(0.55, 1.18);
+  particle.landed = false;
+  particle.landedElapsed = 0;
+  particle.landedX = 0;
+  particle.landedRotation = 0;
+  particle.landedScaleX = 1;
+  particle.landedScaleY = 1;
+  particle.fallSpeed = randomBetween(24, 46);
+  particle.crossDrift = randomBetween(-9, 9);
+  particle.driftAmplitude = randomBetween(10, 28);
+  particle.driftFrequency = randomBetween(0.52, 1.16);
   particle.rotationBase = randomBetween(0, 360);
-  particle.rotationVelocity = randomBetween(-24, 24);
+  particle.rotationVelocity = randomBetween(-28, 28);
   particle.turnPhase = randomBetween(0, Math.PI * 2);
-  particle.turnSpeed = randomBetween(1.1, 2.05);
-  particle.opacityBase = randomBetween(0.24, 0.4);
+  particle.turnSpeed = randomBetween(1.08, 1.98);
+  particle.opacityBase = randomBetween(0.44, 0.72);
 
-  particle.element.style.width = `${size.toFixed(2)}px`;
-  particle.element.style.height = `${size.toFixed(2)}px`;
+  particle.element.setAttribute("width", size.toFixed(2));
+  particle.element.setAttribute("height", size.toFixed(2));
+  particle.element.setAttribute("opacity", "0");
 }
 
 function ensurePetalParticleCount() {
@@ -306,6 +317,14 @@ function ensurePetalParticleCount() {
   }
 }
 
+function setPetalParticleTransform(particle, x, y, rotation, scaleX, scaleY) {
+  const center = particle.size * 0.5;
+  particle.element.setAttribute(
+    "transform",
+    `translate(${x.toFixed(2)} ${y.toFixed(2)}) translate(${center.toFixed(2)} ${center.toFixed(2)}) rotate(${rotation.toFixed(2)}) scale(${scaleX.toFixed(3)} ${scaleY.toFixed(3)}) translate(${(-center).toFixed(2)} ${(-center).toFixed(2)})`,
+  );
+}
+
 function stepPetalParticles(now) {
   if (!petalParticles || petalParticleState.reducedMotion) return;
 
@@ -324,6 +343,39 @@ function stepPetalParticles(now) {
 
   for (const particle of petalParticleState.items) {
     particle.elapsed += dt;
+
+    if (particle.landed) {
+      particle.landedElapsed += dt;
+      const fadeOut =
+        particle.landedElapsed <= PETAL_PARTICLE_REST_FADE_START_S
+          ? 1
+          : clamp(
+              1 -
+                (particle.landedElapsed - PETAL_PARTICLE_REST_FADE_START_S) /
+                  Math.max(PETAL_PARTICLE_REST_DURATION_S - PETAL_PARTICLE_REST_FADE_START_S, 0.001),
+              0,
+              1,
+            );
+
+      particle.element.setAttribute(
+        "opacity",
+        clamp(particle.opacityBase * 1.06 * fadeOut, 0, 1).toFixed(3),
+      );
+      setPetalParticleTransform(
+        particle,
+        particle.landedX,
+        particle.y,
+        particle.landedRotation,
+        particle.landedScaleX,
+        particle.landedScaleY,
+      );
+
+      if (particle.landedElapsed >= PETAL_PARTICLE_REST_DURATION_S) {
+        resetPetalParticle(particle);
+      }
+      continue;
+    }
+
     particle.y += particle.fallSpeed * dt;
 
     const x =
@@ -347,18 +399,38 @@ function stepPetalParticles(now) {
     const opacity =
       particle.opacityBase *
       Math.max(0, fade) *
-      (0.9 + Math.cos(particle.elapsed * 0.72 + particle.turnPhase) * 0.06);
+      (0.98 + Math.cos(particle.elapsed * 0.72 + particle.turnPhase) * 0.08);
 
-    particle.element.style.opacity = opacity.toFixed(3);
-    particle.element.style.transform =
-      `translate3d(${x.toFixed(2)}px, ${particle.y.toFixed(2)}px, 0) ` +
-      `rotate(${rotation.toFixed(2)}deg) ` +
-      `scale(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)})`;
+    if (particle.y + particle.size >= particle.groundY) {
+      particle.y = particle.groundY - particle.size;
+      particle.landed = true;
+      particle.landedElapsed = 0;
+      particle.landedX = x;
+      particle.landedRotation = rotation + randomBetween(-10, 10);
+      particle.landedScaleX = randomBetween(1.02, 1.14);
+      particle.landedScaleY = randomBetween(0.7, 0.84);
+      particle.element.setAttribute(
+        "opacity",
+        clamp(particle.opacityBase * 1.08, 0, 1).toFixed(3),
+      );
+      setPetalParticleTransform(
+        particle,
+        particle.landedX,
+        particle.y,
+        particle.landedRotation,
+        particle.landedScaleX,
+        particle.landedScaleY,
+      );
+      continue;
+    }
+
+    particle.element.setAttribute("opacity", clamp(opacity, 0, 1).toFixed(3));
+    setPetalParticleTransform(particle, x, particle.y, rotation, scaleX, scaleY);
 
     if (
-      particle.y > height + particle.size * 1.5 ||
       x < -particle.size * 3 ||
-      x > width + particle.size * 3
+      x > width + particle.size * 3 ||
+      particle.y > height + particle.size * 1.5
     ) {
       resetPetalParticle(particle);
     }
@@ -1021,6 +1093,9 @@ const topicEntry = setupTopicEntry({
   resetViewport: resetViewportPosition,
   focusTree: scheduleTreeViewportFocus,
   animateTreeTopic: animateTreeTopicLabel,
+  setInitialGrowthLoading: (loading) => {
+    renderer.setRootLoading(loading);
+  },
   onTopicSeeded: (snapshot) => {
     syncNodeInfoPanelVisibility(snapshot);
   },

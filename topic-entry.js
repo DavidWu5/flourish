@@ -9,6 +9,7 @@ export function setupTopicEntry({
   resetViewport = () => {},
   focusTree = () => {},
   animateTreeTopic = () => {},
+  setInitialGrowthLoading = () => {},
   onTopicSeeded = () => {},
   createProvider = createDefaultProvider,
   defaultTopic = "",
@@ -104,7 +105,12 @@ export function setupTopicEntry({
 
       animateTreeTopic(topic);
       setStatus("Growing the first foundational branches...");
-      await controller.expand(rootId);
+      setInitialGrowthLoading(true);
+      try {
+        await controller.expand(rootId);
+      } finally {
+        setInitialGrowthLoading(false);
+      }
 
       // Pre-fetch all starter node expansions in the background so clicks feel instant
       const freshSnapshot = controller.getSnapshot();

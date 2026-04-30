@@ -10,6 +10,11 @@ const TRUNK_SPREAD_MAX = 0.48;
 const ROOT_BASE_LENGTH = 150;
 const ROOT_BASE_START_WIDTH_MULTIPLIER = 3.18;
 const ROOT_BASE_END_WIDTH_MULTIPLIER = 1.24;
+const ROOT_LOADING_BRANCH_COUNT = 3;
+const ROOT_LOADING_PROGRESS_FLOOR = 0.06;
+const ROOT_LOADING_PROGRESS_CAP = 0.92;
+const ROOT_LOADING_RISE_MS = 2300;
+const ROOT_LOADING_PULSE_SPEED = 0.0034;
 const GROW_DURATION = 1250;
 const GROW_DURATION_VARIANCE = 320;
 const GROW_STAGGER_BASE = 82;
@@ -50,6 +55,11 @@ export function createTreeRenderer({
     rafId: 0,
     lastNow: performance.now(),
     viewportScale: 1,
+    rootLoading: {
+      active: false,
+      startedAt: 0,
+      placeholderIds: [],
+    },
     hoverPathNodeId: null,
     hoveredNodeId: null,
     selectedNodeId: null,
@@ -116,6 +126,8 @@ export function createTreeRenderer({
       side: 0,
       expandable: data.expandable !== false,
       seed: randomSeeds(),
+      loadingPlaceholder: Boolean(data.loadingPlaceholder),
+      loadingPhase: Number(data.loadingPhase) || 0,
       stats: baseStats(),
       target: { ...pose },
       from: { ...pose },
@@ -129,6 +141,31 @@ export function createTreeRenderer({
         error: null,
       },
     };
+  }
+
+  function loadingPlaceholderId(index) {
+    return `__root-loading-${index}`;
+  }
+
+  function loadingPlaceholderSeed(index) {
+    const side = childSpreadOffset(index, ROOT_LOADING_BRANCH_COUNT);
+    return {
+      curve: 0.24 + index * 0.18,
+      warp: 0.32 + index * 0.14,
+      lean: side * 0.65,
+      length: 0.26 + index * 0.22,
+    };
+  }
+
+  function isLoadingPlaceholder(node) {
+    return Boolean(node?.loadingPlaceholder);
+  }
+
+  function realChildren(node) {
+    if (!node) return [];
+    return node.children
+      .map((childId) => state.nodes.get(childId))
+      .filter((child) => child && !isLoadingPlaceholder(child));
   }
 
   function clamp(value, min, max) {
@@ -286,7 +323,7 @@ export function createTreeRenderer({
   }
 
   function canExpand(node) {
-    return Boolean(node.expandable) && !node.ui.loading && node.children.length === 0;
+    return Boolean(node.expandable) && node.children.length === 0;
   }
 
   function createSvgElement(name, attrs = {}) {
@@ -308,6 +345,97 @@ export function createTreeRenderer({
     }
     if (Object.hasOwn(patch, "metadata")) node.metadata = patch.metadata || {};
     if (Object.hasOwn(patch, "expandable")) node.expandable = patch.expandable !== false;
+  }
+
+  function rootLoadingProgress(now = state.lastNow) {
+    if (!state.rootLoading.active) return 0;
+
+    const elapsed = Math.max(0, now - (state.rootLoading.startedAt || now));
+    return clamp(
+      (1 - Math.exp(-elapsed / ROOT_LOADING_RISE_MS)) * ROOT_LOADING_PROGRESS_CAP,
+      ROOT_LOADING_PROGRESS_FLOOR,
+      ROOT_LOADING_PROGRESS_CAP,
+    );
+  }
+
+  function rootLoadingPulse(node, now = state.lastNow) {
+    if (!isLoadingPlaceholder(node)) return null;
+
+    const elapsed = Math.max(0, now - (state.rootLoading.startedAt || now));
+    const pulseBase = (Math.sin(elapsed * ROOT_LOADING_PULSE_SPEED + node.loadingPhase) + 1) * 0.5;
+    return {
+      opacity:
+        lerp(0.12, 0.28, pulseBase) * lerp(0.76, 1, Math.max(rootLoadingProgress(now), 0)),
+    };
+  }
+
+  function ensureRootLoadingPlaceholders() {
+    const root = state.nodes.get(state.rootId);
+    if (!root || realChildren(root).length > 0) return;
+
+    const existingPlaceholders = root.children.filter((childId) =>
+      isLoadingPlaceholder(state.nodes.get(childId)),
+    );
+    state.rootLoading.placeholderIds = existingPlaceholders.slice();
+    if (existingPlaceholders.length === ROOT_LOADING_BRANCH_COUNT) return;
+
+    if (existingPlaceholders.length) {
+      clearRootLoadingPlaceholders();
+    }
+
+    for (let index = 0; index < ROOT_LOADING_BRANCH_COUNT; index += 1) {
+      const child = createVisualNode({
+        id: loadingPlaceholderId(index),
+        parentId: root.id,
+        label: `Loading branch ${index + 1}`,
+        summary: "",
+        description: "",
+        expandable: false,
+        loadingPlaceholder: true,
+        loadingPhase: index * 0.82,
+      });
+      child.seed = loadingPlaceholderSeed(index);
+      child.from = {
+        x: root.render.x,
+        y: root.render.y,
+        angle: root.render.angle,
+        thickness: Math.max(1.4, root.render.thickness * 0.74),
+      };
+      child.render = {
+        ...child.from,
+        visibility: 0.0001,
+        emphasis: root.render.emphasis ?? 1,
+      };
+      state.nodes.set(child.id, child);
+      root.children.push(child.id);
+      state.rootLoading.placeholderIds.push(child.id);
+    }
+
+    hydrateHierarchy(state.rootId);
+    layoutTree();
+  }
+
+  function clearRootLoadingPlaceholders() {
+    const root = state.nodes.get(state.rootId);
+    if (!root) return false;
+
+    const placeholderIds = new Set(
+      root.children.filter((childId) => isLoadingPlaceholder(state.nodes.get(childId))),
+    );
+    if (!placeholderIds.size) {
+      state.rootLoading.placeholderIds = [];
+      return false;
+    }
+
+    root.children = root.children.filter((childId) => !placeholderIds.has(childId));
+    placeholderIds.forEach((nodeId) => {
+      state.nodes.delete(nodeId);
+    });
+    state.rootLoading.placeholderIds = [];
+
+    hydrateHierarchy(state.rootId);
+    layoutTree();
+    return true;
   }
 
   function setSelectedNode(nodeId = null) {
@@ -399,6 +527,9 @@ export function createTreeRenderer({
     state.nodes.clear();
     state.animation = null;
     state.emphasisAnimation = null;
+    state.rootLoading.active = false;
+    state.rootLoading.startedAt = 0;
+    state.rootLoading.placeholderIds = [];
     state.hoverPathNodeId = null;
     state.hoveredNodeId = null;
     state.selectedNodeId = null;
@@ -444,7 +575,7 @@ export function createTreeRenderer({
 
   function appendChildren(parentId, childNodes) {
     const parent = state.nodes.get(parentId);
-    if (!parent || !childNodes.length) {
+    if (!parent) {
       if (!state.animation) drawScene(state.lastNow);
       return;
     }
@@ -452,8 +583,8 @@ export function createTreeRenderer({
     const freshNodes = [];
     const now = performance.now();
     const existingLabels = new Set(
-      parent.children
-        .map((childId) => state.nodes.get(childId)?.label?.trim().toLowerCase())
+      realChildren(parent)
+        .map((child) => child.label?.trim().toLowerCase())
         .filter(Boolean),
     );
 
@@ -466,29 +597,83 @@ export function createTreeRenderer({
       };
     }
 
+    const placeholderIds =
+      parentId === state.rootId ? state.rootLoading.placeholderIds.filter((nodeId) => state.nodes.has(nodeId)) : [];
+    let adoptedPlaceholders = 0;
+    const continuedNodeIds = new Set();
+
     for (const data of childNodes) {
       const labelKey = data.label?.trim().toLowerCase();
       if (state.nodes.has(data.id) || (labelKey && existingLabels.has(labelKey))) continue;
-      const child = createVisualNode({ ...data, parentId });
-      state.nodes.set(child.id, child);
-      parent.children.push(child.id);
-      if (labelKey) existingLabels.add(labelKey);
+      let child;
+      const placeholderId = placeholderIds[adoptedPlaceholders];
 
-      child.from = {
-        x: parent.render.x,
-        y: parent.render.y,
-        angle: parent.render.angle,
-        thickness: Math.max(1.4, parent.render.thickness * 0.74),
-      };
-      child.render = {
-        ...child.from,
-        visibility: 0.0001,
-        emphasis: child.targetEmphasis ?? parent.render.emphasis ?? 1,
-      };
+      if (placeholderId) {
+        child = state.nodes.get(placeholderId);
+        if (!child) continue;
+        const parentIndex = parent.children.indexOf(placeholderId);
+        const currentRender = {
+          x: child.render.x,
+          y: child.render.y,
+          angle: child.render.angle,
+          thickness: child.render.thickness,
+        };
+        state.nodes.delete(placeholderId);
+        child.id = data.id;
+        child.parentId = parentId;
+        child.loadingPlaceholder = false;
+        child.loadingPhase = 0;
+        patchPublicNode(child, data);
+        child.from = currentRender;
+        child.render = {
+          ...currentRender,
+          visibility: Math.max(child.render.visibility ?? 0.0001, 0.0001),
+          emphasis: child.render.emphasis ?? parent.render.emphasis ?? 1,
+        };
+        state.nodes.set(child.id, child);
+        if (parentIndex >= 0) {
+          parent.children[parentIndex] = child.id;
+        }
+        adoptedPlaceholders += 1;
+        continuedNodeIds.add(child.id);
+      } else {
+        child = createVisualNode({ ...data, parentId });
+        state.nodes.set(child.id, child);
+        parent.children.push(child.id);
+        child.from = {
+          x: parent.render.x,
+          y: parent.render.y,
+          angle: parent.render.angle,
+          thickness: Math.max(1.4, parent.render.thickness * 0.74),
+        };
+        child.render = {
+          ...child.from,
+          visibility: 0.0001,
+          emphasis: child.targetEmphasis ?? parent.render.emphasis ?? 1,
+        };
+      }
+
+      if (labelKey) existingLabels.add(labelKey);
       freshNodes.push(child.id);
     }
 
+    const unusedPlaceholderIds = placeholderIds.slice(adoptedPlaceholders);
+    if (unusedPlaceholderIds.length) {
+      parent.children = parent.children.filter((childId) => !unusedPlaceholderIds.includes(childId));
+      unusedPlaceholderIds.forEach((nodeId) => {
+        state.nodes.delete(nodeId);
+      });
+    }
+    if (placeholderIds.length) {
+      state.rootLoading.placeholderIds = [];
+    }
+
     if (!freshNodes.length) {
+      if (placeholderIds.length) {
+        hydrateHierarchy(state.rootId);
+        layoutTree();
+        updateAnimation(now);
+      }
       if (state.hoveredNodeId === parentId) {
         state.onHoverChange(getNodeDetails(parentId));
       }
@@ -513,18 +698,26 @@ export function createTreeRenderer({
       const child = state.nodes.get(nodeId);
       if (!child) return;
       const isMiddleChild = nodeId === centerChildId;
+      const continuesFromPreview = continuedNodeIds.has(nodeId);
+      const initialGrowT = continuesFromPreview ? clamp(rootLoadingProgress(now), 0, 0.98) : 0;
 
-      const startOffset = Math.max(
-        0,
-        index * GROW_STAGGER_BASE +
-          lerp(0, GROW_STAGGER_VARIANCE, child.seed.curve) -
-          (isMiddleChild ? MIDDLE_BRANCH_START_ADVANCE : 0),
-      );
+      const startOffset = continuesFromPreview
+        ? 0
+        : Math.max(
+            0,
+            index * GROW_STAGGER_BASE +
+              lerp(0, GROW_STAGGER_VARIANCE, child.seed.curve) -
+              (isMiddleChild ? MIDDLE_BRANCH_START_ADVANCE : 0),
+          );
       const durationBase =
         GROW_DURATION + lerp(-GROW_DURATION_VARIANCE, GROW_DURATION_VARIANCE, child.seed.length);
-      const duration = isMiddleChild
-        ? durationBase * MIDDLE_BRANCH_DURATION_MULTIPLIER
-        : durationBase;
+      const continuationScale = continuesFromPreview
+        ? Math.max(0.22, 1 - initialGrowT)
+        : 1;
+      const duration =
+        (isMiddleChild && !continuesFromPreview
+          ? durationBase * MIDDLE_BRANCH_DURATION_MULTIPLIER
+          : durationBase) * continuationScale;
       const start = now + startOffset;
       const end = start + duration;
 
@@ -532,6 +725,8 @@ export function createTreeRenderer({
         start,
         end,
         duration,
+        initialGrowT,
+        continuesFromPreview,
       });
       animationEnd = Math.max(animationEnd, end);
     });
@@ -617,6 +812,28 @@ export function createTreeRenderer({
     if (Math.abs(nextScale - state.viewportScale) < 0.001) return;
     state.viewportScale = nextScale;
     if (!state.animation) {
+      drawScene(state.lastNow);
+    }
+  }
+
+  function setRootLoading(active) {
+    const nextActive = Boolean(active);
+    if (nextActive) {
+      if (!state.rootLoading.active) {
+        state.rootLoading.startedAt = performance.now();
+      }
+      state.rootLoading.active = true;
+      ensureRootLoadingPlaceholders();
+      runAnimationLoop();
+      return;
+    }
+
+    if (!state.rootLoading.active && !state.rootLoading.placeholderIds.length) return;
+    state.rootLoading.active = false;
+    state.rootLoading.startedAt = 0;
+    clearRootLoadingPlaceholders();
+    if (!state.animation) {
+      updateAnimation(state.lastNow);
       drawScene(state.lastNow);
     }
   }
@@ -842,7 +1059,12 @@ export function createTreeRenderer({
       updateEmphasisAnimation(now);
       drawScene(now);
 
-      if (state.animation || state.emphasisAnimation || BRANCH_TURBULENCE_ENABLED) {
+      if (
+        state.animation ||
+        state.emphasisAnimation ||
+        state.rootLoading.active ||
+        BRANCH_TURBULENCE_ENABLED
+      ) {
         state.rafId = requestAnimationFrame(tick);
       }
     };
@@ -850,10 +1072,9 @@ export function createTreeRenderer({
     state.rafId = requestAnimationFrame(tick);
   }
 
-  function getGrowthState(animation, nodeId, now) {
-    const timing = animation.childTimings?.get(nodeId);
-    const localDuration = Math.max(1, timing?.duration ?? GROW_DURATION);
-    const localGrowT = clamp((now - (timing?.start ?? animation.start)) / localDuration, 0, 1);
+  function buildGrowthState(localGrowT, options = {}) {
+    const initialGrowT = clamp(options.initialGrowT ?? 0, 0, 0.98);
+    const completionT = clamp(options.completionT ?? 0, 0, 1);
     const settleMix = easeOutBack(clamp(localGrowT * 1.03, 0, 1), 0.68);
     const tipGrowthMix = easeOutCubic(clamp(localGrowT * 1.02, 0, 1));
     const thicknessMix = easeOutCubic(clamp((localGrowT - 0.14) / 0.86, 0, 1));
@@ -888,6 +1109,9 @@ export function createTreeRenderer({
           );
 
     return {
+      completionT,
+      continuesFromPreview: Boolean(options.continuesFromPreview),
+      initialGrowT,
       localGrowT,
       settleMix,
       tipGrowthMix,
@@ -902,11 +1126,92 @@ export function createTreeRenderer({
     };
   }
 
+  function getGrowthState(animation, nodeId, now) {
+    const timing = animation.childTimings?.get(nodeId);
+    const localDuration = Math.max(1, timing?.duration ?? GROW_DURATION);
+    const initialGrowT = clamp(timing?.initialGrowT ?? 0, 0, 0.98);
+    const completionT = clamp((now - (timing?.start ?? animation.start)) / localDuration, 0, 1);
+    const localGrowT = lerp(initialGrowT, 1, completionT);
+    return buildGrowthState(localGrowT, {
+      completionT,
+      initialGrowT,
+      continuesFromPreview: timing?.continuesFromPreview,
+    });
+  }
+
+  function applyGrowingBranchRender(node, parent, motion, growthState) {
+    const {
+      settleMix,
+      tipGrowthMix,
+      thicknessMix,
+      growthBendScale,
+    } = growthState;
+    const settledPose = {
+      x: lerp(node.from.x, node.target.x, settleMix),
+      y: lerp(node.from.y, node.target.y, settleMix),
+      angle: lerpAngle(node.from.angle, node.target.angle, settleMix),
+      thickness: lerp(node.from.thickness, node.target.thickness, settleMix),
+    };
+
+    if (!parent) {
+      node.render = {
+        ...settledPose,
+        visibility: clamp(tipGrowthMix * 1.04, 0, 1),
+        emphasis: node.render.emphasis ?? 1,
+      };
+      return;
+    }
+
+    const geometry = branchGeometryFromPoses(
+      {
+        x: parent.render.x,
+        y: parent.render.y,
+        angle: parent.render.angle,
+      },
+      settledPose,
+      node,
+      {
+        bendScale: growthBendScale * (motion?.bendScale ?? 1),
+        crookOffset: motion?.crookOffset ?? 0,
+        startAngleOffset: motion?.startAngleOffset ?? 0,
+        endAngleOffset: motion?.endAngleOffset ?? 0,
+      },
+    );
+    const tipPoint = branchPointAt(geometry, tipGrowthMix);
+    const tipTangent = normalize(branchTangentAt(geometry, Math.max(0.02, tipGrowthMix)));
+
+    node.render = {
+      x: tipPoint.x,
+      y: tipPoint.y,
+      angle: Math.atan2(tipTangent.y, tipTangent.x),
+      thickness: lerp(node.from.thickness, node.target.thickness, thicknessMix),
+      visibility: clamp(tipGrowthMix * 1.05, 0, 1),
+      emphasis: node.render.emphasis ?? 1,
+    };
+  }
+
   function updateAnimation(now) {
     const animation = state.animation;
 
     if (!animation) {
+      const loadingProgress = rootLoadingProgress(now);
       for (const node of state.nodes.values()) {
+        if (isLoadingPlaceholder(node) && state.rootLoading.active) {
+          const parent = node.parentId ? state.nodes.get(node.parentId) : null;
+          const motion = branchMotion(node, now);
+          applyGrowingBranchRender(
+            node,
+            parent,
+            motion,
+            buildGrowthState(loadingProgress, {
+              completionT: 0,
+              initialGrowT: 0,
+              continuesFromPreview: false,
+            }),
+          );
+          continue;
+        }
+
         const motion = branchMotion(node, now);
         const pose = applyPoseMotion(node.target, motion);
         node.render = {
@@ -950,54 +1255,40 @@ export function createTreeRenderer({
       const node = state.nodes.get(nodeId);
       if (!node) continue;
       const growthState = getGrowthState(animation, nodeId, now);
-      const { settleMix, tipGrowthMix, thicknessMix, growthBendScale } = growthState;
+      const {
+        completionT,
+        continuesFromPreview,
+        settleMix,
+        tipGrowthMix,
+        thicknessMix,
+        growthBendScale,
+      } = growthState;
 
       const parent = node.parentId ? state.nodes.get(node.parentId) : null;
-      const settledPose = {
-        x: lerp(node.from.x, node.target.x, settleMix),
-        y: lerp(node.from.y, node.target.y, settleMix),
-        angle: lerpAngle(node.from.angle, node.target.angle, settleMix),
-        thickness: lerp(node.from.thickness, node.target.thickness, settleMix),
-      };
+      const motion = branchMotion(node, now);
 
-      if (!parent) {
+      if (continuesFromPreview) {
+        const continuationMix = easeOutCubic(completionT);
+        const basePose = {
+          x: lerp(node.from.x, node.target.x, continuationMix),
+          y: lerp(node.from.y, node.target.y, continuationMix),
+          angle: lerpAngle(node.from.angle, node.target.angle, continuationMix),
+          thickness: lerp(node.from.thickness, node.target.thickness, continuationMix),
+        };
+        const pose = applyPoseMotion(basePose, motion);
+
         node.render = {
-          ...settledPose,
-          visibility: clamp(tipGrowthMix * 1.04, 0, 1),
+          x: pose.x,
+          y: pose.y,
+          angle: pose.angle,
+          thickness: pose.thickness,
+          visibility: 1,
           emphasis: node.render.emphasis ?? 1,
         };
         continue;
       }
 
-      const geometry = branchGeometryFromPoses(
-        {
-          x: parent.render.x,
-          y: parent.render.y,
-          angle: parent.render.angle,
-        },
-        settledPose,
-        node,
-        (() => {
-          const motion = branchMotion(node, now);
-          return {
-            bendScale: growthBendScale * (motion?.bendScale ?? 1),
-            crookOffset: motion?.crookOffset ?? 0,
-            startAngleOffset: motion?.startAngleOffset ?? 0,
-            endAngleOffset: motion?.endAngleOffset ?? 0,
-          };
-        })(),
-      );
-      const tipPoint = branchPointAt(geometry, tipGrowthMix);
-      const tipTangent = normalize(branchTangentAt(geometry, Math.max(0.02, tipGrowthMix)));
-
-      node.render = {
-        x: tipPoint.x,
-        y: tipPoint.y,
-        angle: Math.atan2(tipTangent.y, tipTangent.x),
-        thickness: lerp(node.from.thickness, node.target.thickness, thicknessMix),
-        visibility: clamp(tipGrowthMix * 1.05, 0, 1),
-        emphasis: node.render.emphasis ?? 1,
-      };
+      applyGrowingBranchRender(node, parent, motion, growthState);
     }
 
     if (now >= animation.end) {
@@ -1374,6 +1665,24 @@ export function createTreeRenderer({
     branchGroup.append(shell);
   }
 
+  function drawBranchPreviewPulse(paths, pulse, emphasis = 1) {
+    if (!pulse || pulse.opacity <= 0.001) return;
+
+    const glow = createSvgElement("path", {
+      d: paths.shell,
+      class: "branch-preview-pulse-glow",
+      opacity: (pulse.opacity * 0.92 * emphasis).toFixed(3),
+    });
+    const shell = createSvgElement("path", {
+      d: paths.shell,
+      class: "branch-preview-pulse",
+      opacity: (pulse.opacity * 0.56 * emphasis).toFixed(3),
+    });
+
+    branchBackdrop.append(glow);
+    branchGroup.append(shell);
+  }
+
   function drawBranchEnchant(
     geometry,
     startWidth,
@@ -1569,9 +1878,11 @@ export function createTreeRenderer({
       const startWidth = branchStartWidth(parent, node) * BRANCH_RENDER_SCALE * 0.5;
       const endWidth = branchEndWidth(node) * BRANCH_RENDER_SCALE * 0.5;
       const samples = node.slot === "trunk" ? 18 : 14;
+      const isPlaceholder = isLoadingPlaceholder(node);
+      const paths = branchSurfacePaths(geometry, startWidth, endWidth, samples, motion || {});
 
       drawBranchSurface({
-        paths: branchSurfacePaths(geometry, startWidth, endWidth, samples, motion || {}),
+        paths,
         barkTexture: branchBarkTexture(geometry, startWidth, endWidth, node.seed.curve, node.seed.warp),
         centerline: geometry.centerline,
         highlightWidth: Math.max(0.75, endWidth * 0.16),
@@ -1581,8 +1892,12 @@ export function createTreeRenderer({
         emphasis: node.render.emphasis ?? 1,
       });
 
+      if (isPlaceholder) {
+        drawBranchPreviewPulse(paths, rootLoadingPulse(node, now), node.render.emphasis ?? 1);
+      }
+
       const growthState =
-        state.animation && state.animation.newChildIds.has(node.id)
+        !isPlaceholder && state.animation && state.animation.newChildIds.has(node.id)
           ? getGrowthState(state.animation, node.id, now)
           : null;
       if (growthState?.enchant) {
@@ -1595,16 +1910,19 @@ export function createTreeRenderer({
         );
       }
 
-      const branchHit = createSvgElement("path", {
-        d: geometry.centerline,
-        class: "branch-hit",
-        "stroke-width": (Math.max(22, (startWidth + endWidth) * 2.2) * uiScale).toFixed(2),
-      });
-      attachBranchInteractions(branchHit, node.id);
-      branchGroup.append(branchHit);
+      if (!isPlaceholder) {
+        const branchHit = createSvgElement("path", {
+          d: geometry.centerline,
+          class: "branch-hit",
+          "stroke-width": (Math.max(22, (startWidth + endWidth) * 2.2) * uiScale).toFixed(2),
+        });
+        attachBranchInteractions(branchHit, node.id);
+        branchGroup.append(branchHit);
+      }
     }
 
     for (const node of nodes) {
+      if (isLoadingPlaceholder(node)) continue;
       const emphasis = node.render.emphasis ?? 1;
       if (!node.parentId) {
         const rootHit = createSvgElement("circle", {
@@ -1772,7 +2090,7 @@ export function createTreeRenderer({
       metadata: node.metadata,
       depth: node.depth,
       expandable: node.expandable,
-      childCount: node.children.length,
+      childCount: realChildren(node).length,
       path: buildPath(nodeId),
     };
   }
@@ -1792,11 +2110,12 @@ export function createTreeRenderer({
       depth: node.depth,
       expandable: node.expandable,
       path: details.path,
-      existingChildren: node.children.map((childId) => state.nodes.get(childId)?.label).filter(Boolean),
+      existingChildren: realChildren(node).map((child) => child.label).filter(Boolean),
     };
   }
 
   function serializeNode(node) {
+    if (!node || isLoadingPlaceholder(node)) return null;
     return {
       id: node.id,
       label: node.label,
@@ -1813,8 +2132,9 @@ export function createTreeRenderer({
 
     const root = state.nodes.get(state.rootId);
     const nodes = [...state.nodes.values()]
-      .filter((node) => node.id !== state.rootId)
-      .map(serializeNode);
+      .filter((node) => node.id !== state.rootId && !isLoadingPlaceholder(node))
+      .map(serializeNode)
+      .filter(Boolean);
 
     return {
       root: serializeNode(root),
@@ -1834,6 +2154,7 @@ export function createTreeRenderer({
     setViewportScale,
     setNodeError,
     setNodeLoading,
+    setRootLoading,
     setTree,
   };
 }
