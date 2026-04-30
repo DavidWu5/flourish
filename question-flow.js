@@ -401,7 +401,7 @@ export function setupQuestionFlow({
         return;
       }
 
-      if (diagnosis.understanding_level === "correct") {
+      if (diagnosis.understanding_level === "correct" || diagnosis.understanding_level === "partial") {
         patchNodeMetadata(node.id, (currentMetadata) => ({
           ...currentMetadata,
           status: "complete",
@@ -457,6 +457,12 @@ export function setupQuestionFlow({
 
   closeButton.addEventListener("click", () => {
     handleClose();
+  });
+
+  panel.addEventListener("click", (event) => {
+    if (event.target === panel && !isSubmitting) {
+      handleClose();
+    }
   });
 
   resetButton.addEventListener("click", () => {

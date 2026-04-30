@@ -191,7 +191,7 @@ function fallbackDiagnosis(payload) {
     };
   }
 
-  if (overlap >= 1 && answerWords >= 5) {
+  if (overlap >= 1 && answerWords >= 3) {
     return {
       understanding_level: 'correct',
       tree_action: 'continue',
@@ -202,7 +202,7 @@ function fallbackDiagnosis(payload) {
     };
   }
 
-  if (answerWords >= 3) {
+  if (answerWords >= 2) {
     return {
       understanding_level: 'partial',
       tree_action: 'continue',
@@ -287,11 +287,12 @@ async function maybeDiagnoseWithVertex(payload) {
       `Question: ${payload.question}`,
       `Learner answer: ${payload.answer}`,
       `Existing node ids: ${existingNodeIds.join(', ') || '(none)'}`,
-      'Classify the answer as correct, partial, or wrong. Be lenient — a short answer of 3-5 words that shows basic conceptual understanding is correct.',
-      'Only mark wrong if the answer is clearly off-topic, empty, or shows no understanding of the concept.',
-      'If a missing prerequisite is blocking progress, set tree_action to insert_prerequisite_node and return a compact prerequisite node.',
-      'Feedback message: under 40 words, action-oriented, encouraging, no lectures.',
-      "If the answer is empty or 'idk', treat it as wrong.",
+      'Classify the answer as correct, partial, or wrong. Be VERY lenient.',
+      'Mark "correct" for any answer that touches on a relevant idea, even just 2-4 words. Short answers are fine.',
+      'Mark "wrong" ONLY if the answer is completely blank, completely off-topic, or shows a fundamental misconception that needs a prerequisite.',
+      'Mark "partial" only if the answer is on-topic but dangerously incomplete — e.g. only one word with no context.',
+      'If wrong, set tree_action to insert_prerequisite_node with a compact prerequisite node.',
+      'Feedback message: under 30 words, warm and encouraging.',
     ].join('\n'),
     schema: DIAGNOSIS_SCHEMA,
     config: structuredConfig(DIAGNOSIS_SCHEMA),
