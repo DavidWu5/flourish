@@ -1117,8 +1117,12 @@ setupNodeDetailPanel();
 setupSpacebarDetailShortcut();
 setupInitialTreeFocus();
 
+const spaceHint = document.querySelector("#spaceHint");
 renderer.setHoverHandler((node) => {
   renderNodeInfo(node);
+  if (spaceHint) {
+    spaceHint.hidden = !node;
+  }
 });
 
 const controller = new TreeController({
