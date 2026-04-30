@@ -43,6 +43,8 @@ export function setupQuestionFlow({
   controller,
   renderer,
   getApi = createDefaultApi,
+  onPrerequisiteInserted = null,
+  onNodeClick = null,
 } = {}) {
   const panel = document.querySelector("#questionPanel");
   const title = document.querySelector("#questionTitle");
@@ -371,6 +373,17 @@ export function setupQuestionFlow({
         diagnosis.tree_action === "insert_prerequisite_node" &&
         diagnosis.new_node
       ) {
+        // Don't nest prerequisites — if this node is already a prerequisite, just give feedback
+        const currentRecord = getNodeRecord(node.id);
+        if (currentRecord?.metadata?.kind === "prerequisite") {
+          setPanelStatus(
+            diagnosis.feedback_message || "Keep going — you're working toward it.",
+            "warning",
+          );
+          focusAnswer();
+          return;
+        }
+
         const prerequisiteNode = {
           id: diagnosis.new_node.id || `${node.id}--prereq-${Date.now().toString(36)}`,
           label: diagnosis.new_node.title || diagnosis.missing_prerequisite || "Prerequisite",
@@ -398,6 +411,14 @@ export function setupQuestionFlow({
         }));
         appendPrerequisiteNode(node.id, prerequisiteNode);
         hidePanel();
+
+        // Auto-open the detail panel for the new prerequisite after the tree animates
+        if (typeof onPrerequisiteInserted === "function") {
+          setTimeout(() => {
+            const prereqRecord = getNodeRecord(prerequisiteNode.id);
+            if (prereqRecord) onPrerequisiteInserted(prereqRecord);
+          }, 600);
+        }
         return;
       }
 
@@ -478,7 +499,11 @@ export function setupQuestionFlow({
       }
       return;
     }
-    void openQuestion(node);
+    if (typeof onNodeClick === "function") {
+      onNodeClick(node);
+    } else {
+      void openQuestion(node);
+    }
   });
 
   // Gate expansion: if a node has an unanswered question, show it instead of expanding

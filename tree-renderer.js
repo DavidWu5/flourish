@@ -1848,6 +1848,16 @@ export function createTreeRenderer({
     nodeGroup.insertBefore(plate, text);
   }
 
+  function nodeStateClasses(node) {
+    const meta = node?.metadata || {};
+    const classes = [];
+    if (meta.status === "complete") classes.push("is-complete");
+    else if (meta.status === "locked") classes.push("is-locked");
+    else if (meta.question) classes.push("is-pending");
+    if (meta.kind === "prerequisite") classes.push("is-prereq");
+    return classes.join(" ");
+  }
+
   function drawScene(now) {
     const viewportScale = state.viewportScale || 1;
     const uiScale = 1 / viewportScale;
@@ -1939,32 +1949,54 @@ export function createTreeRenderer({
         continue;
       }
 
+      const stateClass = nodeStateClasses(node);
+      const stateSuffix = stateClass ? ` ${stateClass}` : "";
       const glow = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
         r: (Math.max(2.2, node.render.thickness * 0.42) * uiScale).toFixed(2),
-        class: "node-glow",
+        class: `node-glow${stateSuffix}`,
         opacity: (0.46 * emphasis).toFixed(3),
       });
       const core = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
         r: (Math.max(1.7, node.render.thickness * 0.18) * uiScale).toFixed(2),
-        class: "node-core",
+        class: `node-core${stateSuffix}`,
         opacity: emphasis.toFixed(3),
       });
       const hit = createSvgElement("circle", {
         cx: node.render.x.toFixed(2),
         cy: node.render.y.toFixed(2),
         r: (Math.max(16, node.render.thickness * 1.18) * uiScale).toFixed(2),
-        class: "topic-hit",
+        class: `topic-hit${stateSuffix}`,
         tabindex: 0,
         role: "button",
         "aria-label": nodeActionLabel(node),
       });
       attachNodeInteractions(hit, node);
 
-      nodeGroup.append(glow, core, hit);
+      if (stateClass.includes("is-pending")) {
+        const ring = createSvgElement("circle", {
+          cx: node.render.x.toFixed(2),
+          cy: node.render.y.toFixed(2),
+          r: (Math.max(8, node.render.thickness * 0.7) * uiScale).toFixed(2),
+          class: "node-pending-ring",
+          opacity: (0.92 * emphasis).toFixed(3),
+        });
+        nodeGroup.append(glow, ring, core, hit);
+      } else if (stateClass.includes("is-complete")) {
+        const checkSize = Math.max(3.6, node.render.thickness * 0.34) * uiScale;
+        const check = createSvgElement("path", {
+          d: `M ${(node.render.x - checkSize * 0.55).toFixed(2)} ${node.render.y.toFixed(2)} L ${(node.render.x - checkSize * 0.12).toFixed(2)} ${(node.render.y + checkSize * 0.45).toFixed(2)} L ${(node.render.x + checkSize * 0.6).toFixed(2)} ${(node.render.y - checkSize * 0.45).toFixed(2)}`,
+          class: "node-complete-check",
+          "stroke-width": (Math.max(1.4, node.render.thickness * 0.16) * uiScale).toFixed(2),
+          opacity: emphasis.toFixed(3),
+        });
+        nodeGroup.append(glow, core, check, hit);
+      } else {
+        nodeGroup.append(glow, core, hit);
+      }
     }
 
     const globallyDisabled = Boolean(state.animation);
@@ -1975,17 +2007,20 @@ export function createTreeRenderer({
 
       const anchor = growthBudAnchor(node);
       const emphasis = node.render.emphasis ?? 1;
+      const meta = node.metadata || {};
+      const needsQuiz = Boolean(meta.question) && meta.status !== "complete";
       const classes = ["tip-button"];
       if (globallyDisabled || node.ui.loading) classes.push("is-disabled");
       if (node.ui.loading) classes.push("is-loading");
       if (node.ui.error) classes.push("is-error");
+      if (needsQuiz) classes.push("is-quiz");
 
       const tipButton = createSvgElement("g", {
         class: classes.join(" "),
         transform: `translate(${anchor.x.toFixed(2)} ${anchor.y.toFixed(2)}) scale(${uiScale.toFixed(3)})`,
         tabindex: globallyDisabled || node.ui.loading ? -1 : 0,
         role: "button",
-        "aria-label": `Expand ${node.label}`,
+        "aria-label": needsQuiz ? `Quiz to unlock ${node.label}` : `Expand ${node.label}`,
         opacity: emphasis.toFixed(3),
       });
 
@@ -1998,20 +2033,36 @@ export function createTreeRenderer({
         class: "tip-ring",
         r: 6.9,
       });
-      const plusH = createSvgElement("line", {
-        class: "tip-plus",
-        x1: -2.6,
-        y1: 0,
-        x2: 2.6,
-        y2: 0,
-      });
-      const plusV = createSvgElement("line", {
-        class: "tip-plus",
-        x1: 0,
-        y1: -2.6,
-        x2: 0,
-        y2: 2.6,
-      });
+
+      tipButton.append(glow, ring);
+
+      if (needsQuiz) {
+        const questionMark = createSvgElement("text", {
+          class: "tip-question",
+          x: 0,
+          y: 0,
+          "text-anchor": "middle",
+          "dominant-baseline": "central",
+        });
+        questionMark.textContent = "?";
+        tipButton.append(questionMark);
+      } else {
+        const plusH = createSvgElement("line", {
+          class: "tip-plus",
+          x1: -2.6,
+          y1: 0,
+          x2: 2.6,
+          y2: 0,
+        });
+        const plusV = createSvgElement("line", {
+          class: "tip-plus",
+          x1: 0,
+          y1: -2.6,
+          x2: 0,
+          y2: 2.6,
+        });
+        tipButton.append(plusH, plusV);
+      }
 
       if (!globallyDisabled && !node.ui.loading) {
         const triggerExpand = () => state.onExpandRequest(node.id);
@@ -2030,7 +2081,6 @@ export function createTreeRenderer({
         });
       }
 
-      tipButton.append(glow, ring, plusH, plusV);
       tipGroup.append(tipButton);
     }
 

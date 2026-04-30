@@ -80,6 +80,30 @@ const nodeDetailCta = document.querySelector("#nodeDetailCta");
 const nodeDetailExplain = document.querySelector("#nodeDetailExplain");
 const nodeDetailStatus = document.querySelector("#nodeDetailStatus");
 const nodeDetailInsights = document.querySelector("#nodeDetailInsights");
+const discoveryToast = document.querySelector("#discoveryToast");
+
+let discoveryToastTimer = null;
+function showDiscoveryToast(prereqNode) {
+  if (!discoveryToast) return;
+  const label = prereqNode?.label || "a stepping stone";
+  discoveryToast.textContent = `Found a stepping stone — let's build up "${label}" first.`;
+  discoveryToast.hidden = false;
+  // Force reflow so the animation restarts even on consecutive triggers
+  void discoveryToast.offsetWidth;
+  discoveryToast.classList.remove("is-visible");
+  void discoveryToast.offsetWidth;
+  discoveryToast.classList.add("is-visible");
+
+  if (discoveryToastTimer) clearTimeout(discoveryToastTimer);
+  discoveryToastTimer = setTimeout(() => {
+    discoveryToast.classList.remove("is-visible");
+    setTimeout(() => {
+      if (!discoveryToast.classList.contains("is-visible")) {
+        discoveryToast.hidden = true;
+      }
+    }, 320);
+  }, 3400);
+}
 
 const panState = {
   x: 0,
@@ -848,20 +872,31 @@ function setNodeDetailStatus(message = "", tone = "info") {
   nodeDetailStatus.textContent = text;
 }
 
-function createInsightCard(title, body, tone = "support") {
+function createInsightCard(title, body, tone = "support", step) {
   const card = document.createElement("article");
   card.className = "node-detail-insight-card";
   card.dataset.tone = tone;
 
+  const header = document.createElement("div");
+  header.className = "node-detail-insight-card-header";
+
+  if (step != null) {
+    const badge = document.createElement("span");
+    badge.className = "node-detail-insight-step";
+    badge.textContent = step;
+    header.append(badge);
+  }
+
   const heading = document.createElement("h3");
   heading.className = "node-detail-insight-card-title";
   heading.textContent = title;
+  header.append(heading);
 
   const content = document.createElement("p");
   content.className = "node-detail-insight-body";
   content.textContent = body;
 
-  card.append(heading, content);
+  card.append(header, content);
   return card;
 }
 
@@ -895,11 +930,18 @@ function renderNodeDetailInsights(node) {
   const grid = document.createElement("div");
   grid.className = "node-detail-insight-grid";
   grid.append(
-    createInsightCard("Think of it like this", cached.response.analogy, "analogy"),
-    createInsightCard("Tiny example", cached.response.micro_example, "example"),
-    createInsightCard("Why this branch matters", cached.response.why_it_matters, "support"),
-    createInsightCard("Try this next", `${cached.response.next_step_prompt}\n\n${cached.response.encouragement}`, "support"),
+    createInsightCard("Think of it like this", cached.response.analogy, "analogy", 1),
+    createInsightCard("Tiny example", cached.response.micro_example, "example", 2),
+    createInsightCard("Why this branch matters", cached.response.why_it_matters, "support", 3),
+    createInsightCard("Try this next", cached.response.next_step_prompt, "support", 4),
   );
+
+  if (cached.response.encouragement) {
+    const nudge = document.createElement("p");
+    nudge.className = "node-detail-insight-nudge";
+    nudge.textContent = cached.response.encouragement;
+    grid.append(nudge);
+  }
 
   nodeDetailInsights.hidden = false;
   nodeDetailInsights.replaceChildren(intro, grid);
@@ -1104,6 +1146,13 @@ const topicEntry = setupTopicEntry({
 const questionFlow = setupQuestionFlow({
   controller,
   renderer,
+  onPrerequisiteInserted: (prereqNode) => {
+    showDiscoveryToast(prereqNode);
+    openNodeDetail(prereqNode);
+  },
+  onNodeClick: (node) => {
+    openNodeDetail(node);
+  },
 });
 
 if (nodeDetailCta) {

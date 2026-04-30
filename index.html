@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tree Growth Visualization Demo</title>
+    <title>Flourish Learning App</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -75,6 +75,23 @@
         </div>
 
         <div class="canvas-hint" id="canvasHint">Drag to move. Scroll or use + / - to zoom.</div>
+
+        <div class="canvas-legend" aria-label="Branch states">
+          <div class="canvas-legend-item">
+            <span class="canvas-legend-dot is-pending" aria-hidden="true"></span>
+            <span>Quiz to unlock</span>
+          </div>
+          <div class="canvas-legend-item">
+            <span class="canvas-legend-dot is-complete" aria-hidden="true"></span>
+            <span>Understood</span>
+          </div>
+          <div class="canvas-legend-item">
+            <span class="canvas-legend-dot is-prereq" aria-hidden="true"></span>
+            <span>Stepping stone</span>
+          </div>
+        </div>
+
+        <div class="discovery-toast" id="discoveryToast" role="status" aria-live="polite" hidden></div>
 
         <aside class="node-info-panel" id="nodeInfoPanel" aria-live="polite" hidden>
           <h2 class="node-info-title" id="nodeInfoTitle">Hover a node</h2>

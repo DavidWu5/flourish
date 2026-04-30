@@ -1,10 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install --prefix server",
   "functions": {
-    "index.mjs": {
-      "includeFiles": "{index.html,app.js,question-flow.js,styles.css,topic-entry.js,tree-controller.js,tree-provider.js,tree-renderer.js,assets/**}",
+    "api/index.mjs": {
+      "includeFiles": "{index.html,app.js,question-flow.js,styles.css,topic-entry.js,tree-controller.js,tree-provider.js,tree-renderer.js,logo-flourish.svg,assets/**}",
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/index.mjs" }
+  ]
 }
