@@ -38,8 +38,7 @@ const staticExtensions = new Set([
 
 function isBlockedPath(normalizedPath) {
   return (
-    normalizedPath.startsWith('/.git') ||
-    normalizedPath.startsWith('/.claude') ||
+    normalizedPath.startsWith('/.') ||
     normalizedPath.startsWith('/server') ||
     normalizedPath.startsWith('/node_modules')
   );
